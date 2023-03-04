@@ -1,0 +1,14 @@
+# Package files
+*.egg
+*.eggs/
+.installed.cfg
+*.egg-info
+
+# Temporary and binary files
+__pycache__/
+
+# virtual environment
+.venv/
+
+# vscode settings
+.vscode/
