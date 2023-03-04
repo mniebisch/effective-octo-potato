@@ -3,14 +3,18 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "effective-octo-potato"
+name = "effective_octo_potato"
 authors = [
     {name = "Christian Reimers"},
     {name = "Michael Niebisch"}
 ]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "pandas",
+    "pyarrow",
+    "torch"
+]
 dynamic = ["version"]
 
 [project.optional-dependencies]
