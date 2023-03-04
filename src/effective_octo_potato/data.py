@@ -4,10 +4,28 @@ import pathlib
 
 import pandas as pd
 import torch
+from torch.utils import data as torch_data
+
 
 __all__ = [
+    "LandmarkDataset",
     "load_parquet_file",
 ]
+
+class LandmarkDataset(torch_data.Dataset):
+    def __init__(self, data_csv: pathlib.Path) -> None:
+        self._data = pd.read_csv(data_csv)
+
+    def __len__(self) -> int:
+        return self._data.shape[0]
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+        parquet_file = self._data[idx]['path']
+        landmark_data: torch.Tensor = load_parquet_file(parquet_file)
+        sign: str = self._data[idx]['sign']
+        # TODO map sign str to int
+        # TODO have fun with the data paths
+        return landmark_data, 
 
 
 def load_parquet_file(file_path: pathlib.Path) -> torch.Tensor:
