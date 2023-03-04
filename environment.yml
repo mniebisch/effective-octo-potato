@@ -1,0 +1,5 @@
+name: eop
+
+dependencies:
+  - python=3.10
+
