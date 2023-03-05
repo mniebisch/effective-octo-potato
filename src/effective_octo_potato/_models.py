@@ -30,10 +30,20 @@ class SimpleNet(torch.nn.Module):
         )
 
         self.relu = torch.nn.ReLU()
-        self.softmax = torch.nn.Softmax(dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Inference function of the classifier."""
+        """
+        Inference function of the classifier.
+
+        The network uses a simple MLP per frame and than calcultes the mean of 
+        the frames as its prediction. To confirm to the 
+        torch.nn.CrossEntropyLoss, no softmax is calculated. The structure of
+        the network is 
+        First Layer --------------------------------- + -> Prediction
+                    \                                /
+                     -> Second Layer -> Third Layer -
+        .
+        """
         x = x.view(1, -1, self.nr_inputs).transpose(1, 2)
 
 
@@ -43,7 +53,6 @@ class SimpleNet(torch.nn.Module):
         y = self.relu(y)
         y = self.conv3(y)
         x = x + y
-        x = self.softmax(x)
 
         return torch.mean(x, dim=-1)
 
