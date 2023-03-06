@@ -20,7 +20,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 dev = []
-test = []
+test = ["pytest"]
 
 [tool.mypy]
 disallow_untyped_defs = true
@@ -32,3 +32,8 @@ show_error_codes = true
 error_summary = true
 files = "src"
 allow_redefinition = true
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
