@@ -23,6 +23,9 @@ def create_idx_map(data: pd.DataFrame) -> list[tuple[int, int]]:
 
     Create a map to access data of a specific frame from data table.
     """
+    required_columns = pd.Series(["frame_min", "frame_max"])
+    if not required_columns.isin(data.columns).all():
+        raise ValueError("Missing columns.")
     # handle mapping to single frame
     frame_ranges: list[tuple[int, int]] = list(
         zip(data["frame_min"], data["frame_max"])
@@ -72,11 +75,15 @@ class LandmarkDataset(torch_data.Dataset):
         """Provide the example for a specific index."""
         parquet_file_idx, frame_idx = self._idx_map[idx]
         parquet_file = self._data[parquet_file_idx]
-        landmark_data: torch.Tensor = load_parquet_file(
-            self.data_dir / parquet_file,
-            ignore_z=self.ignore_z,
+        coord_columns = ["x", "y"]
+        if not self.ignore_z:
+            coord_columns += ["z"]
+
+        landmark_data = pd.read_parquet(
+            self.data_dir / parquet_file, columns=coord_columns + ["frame"]
         )
         landmark_data = landmark_data[landmark_data["frame"] == frame_idx]
+        landmark_data = torch.Tensor(landmark_data[coord_columns].values)
         sign: str = self._label[parquet_file_idx]
         label = self.labels[sign]
         return landmark_data, label
