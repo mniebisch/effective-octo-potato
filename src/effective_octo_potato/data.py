@@ -17,7 +17,6 @@ __all__ = [
 ]
 
 
-# TODO write test
 def create_idx_map(data: pd.DataFrame) -> list[tuple[int, int]]:
     """Batch index map creation.
 
