@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "effective_octo_potato"
-authors = [
-    {name = "Christian Reimers"},
-    {name = "Michael Niebisch"}
-]
+authors = [{ name = "Christian Reimers" }, { name = "Michael Niebisch" }]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = "<3.10"
 dependencies = [
+    "onnx-tf",
     "pandas",
     "pyarrow",
-    "torch",
+    "tensorflow",
+    "tflite-runtime",
+    "torch < 2.0.0",
     "tqdm",
 ]
 dynamic = ["version"]
