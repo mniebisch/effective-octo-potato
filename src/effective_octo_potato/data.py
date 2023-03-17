@@ -16,16 +16,17 @@ __all__ = [
     "load_parquet_file",
 ]
 
+
 class LandmarkDataset(torch_data.Dataset):
     """Provide the dataset for the ladmark data."""
 
     def __init__(
-            self,
-            data_dir: pathlib.Path,
-            data_csv: pathlib.Path,
-            label_csv: pathlib.Path,
-            *, 
-            ignore_z: bool = False
+        self,
+        data_dir: pathlib.Path,
+        data_csv: pathlib.Path,
+        label_csv: pathlib.Path,
+        *,
+        ignore_z: bool = False,
     ):
         self._data = list(pd.read_csv(data_dir / data_csv)["path"])
         self._label = list(pd.read_csv(data_dir / data_csv)["sign"])
@@ -41,18 +42,18 @@ class LandmarkDataset(torch_data.Dataset):
         """Provide the example for a specific index."""
         parquet_file = self._data[idx]
         landmark_data: torch.Tensor = load_parquet_file(
-                self.data_dir / parquet_file, 
-                ignore_z = self.ignore_z,
-            )
+            self.data_dir / parquet_file,
+            ignore_z=self.ignore_z,
+        )
         sign: str = self._label[idx]
         label = self.labels[sign]
         return landmark_data, label
 
 
 def load_parquet_file(
-        file_path: pathlib.Path, 
-        *, 
-        ignore_z: bool = False,
+    file_path: pathlib.Path,
+    *,
+    ignore_z: bool = False,
 ) -> torch.Tensor:
     """
     Load landmarks from parquet file.
@@ -71,4 +72,3 @@ def load_parquet_file(
     sign_data_numpy = np.array(sign_data[coord_columns].values)
     sign_data_numpy = np.nan_to_num(sign_data_numpy)
     return torch.Tensor(sign_data_numpy)
-
