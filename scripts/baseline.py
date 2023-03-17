@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     # hyperparamters
     batch_size = 64
-    epochs = 50
+    epochs = 100
 
     # load/process labels
     data_csv = "train.csv"
