@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # hyperparamters
     batch_size = 64
-    epochs = 50
+    epochs = 2
 
     # load/process labels
     data_csv = "train.csv"
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     labels: npt.NDArray[np.integer] = labels.values
 
     # create/load features
-    feature_matrix_file_name = "baseline_mean_std.npy"
+    feature_matrix_file_name = "baseline_mean_median.npy"
     feature_matrix_file_name = data_base_path / feature_matrix_file_name
     if not feature_matrix_file_name.is_file():
         file_paths = [
@@ -212,7 +212,7 @@ def _compute_features(
         warnings.filterwarnings(
             "ignore", category=RuntimeWarning, message=r"Degrees of freedom"
         )
-        std_feature = np.nanstd(sign_coords, axis=0)
+        std_feature = np.nanmedian(sign_coords, axis=0)
     return np.nan_to_num(mean_feature), np.nan_to_num(std_feature)
 
 
