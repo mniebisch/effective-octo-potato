@@ -130,6 +130,98 @@ def create_features(
     return np.stack(features)
 
 
+def transform_model(
+    model: torch.nn.Module,
+    feature_generator: torch.nn.Module,
+    data_path: pathlib.Path,
+    num_model_input_features: int,
+) -> None:
+    # transform feature generator to onnx
+    feature_sample_input = torch.rand((50, 543, 3))
+    feature_onnx_file = "feature_generator.onnx"
+    feature_onnx_file = data_path / feature_onnx_file
+    feature_generator.eval()
+    torch.onnx.export(
+        feature_generator,
+        feature_sample_input,
+        feature_onnx_file,
+        opset_version=12,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={"input": {0: "input"}},
+    )
+
+    # transform model to onnx
+    model_sample_input = torch.rand((1, num_model_input_features)).cuda()
+    model_onnx_file = "model.onnx"
+    model_onnx_file = data_path / model_onnx_file
+    model.eval()
+    torch.onnx.export(
+        model,
+        model_sample_input,
+        model_onnx_file,
+        opset_version=12,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={"input": {0: "input"}},
+    )
+
+    # transform feature generator to tensorflow
+    feature_tensorflow_path = data_path / "tf_feature_generator"
+    onnx_feature = onnx.load(feature_onnx_file)
+    tensorflow_representation_feature = onnx_tf_backend.prepare(onnx_feature)
+    tensorflow_representation_feature.export_graph(feature_tensorflow_path)
+
+    # transform model to tensorflow
+    model_tensorflow_path = data_path / "tf_model"
+    onnx_model = onnx.load(model_onnx_file)
+    tensorflow_representation_model = onnx_tf_backend.prepare(onnx_model)
+    tensorflow_representation_model.export_graph(model_tensorflow_path)
+
+    # create tensorflow inference model
+    class NetInference(tf.Module):
+        def __init__(self):
+            super().__init__()
+            # TODO add next two lines as input arguments?
+            self.feature_generator = tf.saved_model.load(feature_tensorflow_path)
+            self.model = tf.saved_model.load(model_tensorflow_path)
+            self.feature_generator.trainable = False
+            self.model.trainable = False
+
+        @tf.function(
+            input_signature=[
+                tf.TensorSpec(shape=[None, 543, 3], dtype=tf.float32, name="inputs")
+            ]
+        )
+        def call(self, input):
+            output_tensors = {}
+            features = self.feature_generator(**{"input": input})["output"]
+            output_tensors["outputs"] = self.model(
+                **{"input": tf.expand_dims(features, 0)}
+            )["output"][0, :]
+            return output_tensors
+
+    tensorflow_model = NetInference()
+    inference_model_tensorflow_path = data_path / "inference_model"
+    inference_model_tensorflow_path = str(inference_model_tensorflow_path)
+    tf.saved_model.save(
+        tensorflow_model,
+        inference_model_tensorflow_path,
+        signatures={"serving_default": tensorflow_model.call},
+    )
+
+    # create tensorflow lite model for submission
+    converter = tf.lite.TFLiteConverter.from_saved_model(
+        inference_model_tensorflow_path
+    )
+    tflite_model = converter.convert()
+    tflite_model_file = "model.tflite"
+    tflite_model_file = data_path / tflite_model_file
+
+    with open(tflite_model_file, "wb") as f:
+        f.write(tflite_model)
+
+
 def eval(
     model: torch.nn.Module,
     dataloader: torch_data.DataLoader,
@@ -223,87 +315,9 @@ if __name__ == "__main__":
     print("train acc", train_acc)
     print("valid acc", valid_acc)
 
-    # transform feature generator to onnx
-    feature_sample_input = torch.rand((50, 543, 3))
-    feature_onnx_file = "feature_generator.onnx"
-    feature_onnx_file = data_base_path / feature_onnx_file
-    fg.eval()
-    torch.onnx.export(
-        fg,
-        feature_sample_input,
-        feature_onnx_file,
-        opset_version=12,
-        input_names=["input"],
-        output_names=["output"],
-        dynamic_axes={"input": {0: "input"}},
+    transform_model(
+        model=model,
+        feature_generator=fg,
+        data_path=data_base_path,
+        num_model_input_features=450,
     )
-
-    # transform model to onnx
-    model_sample_input = torch.rand((1, 450)).cuda()
-    model_onnx_file = "model.onnx"
-    model_onnx_file = data_base_path / model_onnx_file
-    model.eval()
-    torch.onnx.export(
-        model,
-        model_sample_input,
-        model_onnx_file,
-        opset_version=12,
-        input_names=["input"],
-        output_names=["output"],
-        dynamic_axes={"input": {0: "input"}},
-    )
-
-    # transform feature generator to tensorflow
-    feature_tensorflow_path = data_base_path / "tf_feature_generator"
-    onnx_feature = onnx.load(feature_onnx_file)
-    tensorflow_representation_feature = onnx_tf_backend.prepare(onnx_feature)
-    tensorflow_representation_feature.export_graph(feature_tensorflow_path)
-
-    # transform model to tensorflow
-    model_tensorflow_path = data_base_path / "tf_model"
-    onnx_model = onnx.load(model_onnx_file)
-    tensorflow_representation_model = onnx_tf_backend.prepare(onnx_model)
-    tensorflow_representation_model.export_graph(model_tensorflow_path)
-
-    # create tensorflow inference model
-    class NetInference(tf.Module):
-        def __init__(self):
-            super().__init__()
-            # TODO add next two lines as input arguments?
-            self.feature_generator = tf.saved_model.load(feature_tensorflow_path)
-            self.model = tf.saved_model.load(model_tensorflow_path)
-            self.feature_generator.trainable = False
-            self.model.trainable = False
-
-        @tf.function(
-            input_signature=[
-                tf.TensorSpec(shape=[None, 543, 3], dtype=tf.float32, name="inputs")
-            ]
-        )
-        def call(self, input):
-            output_tensors = {}
-            features = self.feature_generator(**{"input": input})["output"]
-            output_tensors["outputs"] = self.model(
-                **{"input": tf.expand_dims(features, 0)}
-            )["output"][0, :]
-            return output_tensors
-
-    tensorflow_model = NetInference()
-    inference_model_tensorflow_path = data_base_path / "inference_model"
-    inference_model_tensorflow_path = str(inference_model_tensorflow_path)
-    tf.saved_model.save(
-        tensorflow_model,
-        inference_model_tensorflow_path,
-        signatures={"serving_default": tensorflow_model.call},
-    )
-
-    # create tensorflow lite model for submission
-    converter = tf.lite.TFLiteConverter.from_saved_model(
-        inference_model_tensorflow_path
-    )
-    tflite_model = converter.convert()
-    tflite_model_file = "model.tflite"
-    tflite_model_file = data_base_path / tflite_model_file
-
-    with open(tflite_model_file, "wb") as f:
-        f.write(tflite_model)
