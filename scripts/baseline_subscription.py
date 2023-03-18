@@ -1,4 +1,7 @@
+import pathlib
+
 import numpy as np
+import pandas as pd
 import torch
 from numpy import typing as npt
 
@@ -32,8 +35,8 @@ class FeatureGenerator(torch.nn.Module):
 
     def _compute_features(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         mean_features = torch.nanmean(x, dim=0)
-        median_features = torch.nanmedian(x, dim=0)
-        return torch.nan_to_num(mean_features), torch.nan_to_num(median_features)
+        median_features = torch.nanmedian(x, dim=0).values
+        return (torch.nan_to_num(mean_features), torch.nan_to_num(median_features))
 
     def _select_landmarks(self, x: torch.Tensor) -> torch.Tensor:
         left_hand = torch.arange(458, 489, dtype=torch.long)
@@ -49,7 +52,22 @@ class FeatureGenerator(torch.nn.Module):
         return torch.flatten(features)
 
 
+def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
+    ROWS_PER_FRAME = 543  # number of landmarks per frame
+    data_columns = ["x", "y", "z"]
+    data = pd.read_parquet(pq_path, columns=data_columns)
+    n_frames = int(len(data) / ROWS_PER_FRAME)
+    data = data.values.reshape(n_frames, ROWS_PER_FRAME, len(data_columns))
+    return data.astype(np.float32)
+
+
 if __name__ == "__main__":
-    x_dummy = np.random.rand(20, 543, 3).astype(np.float32)
+    data_base_path = pathlib.Path(__file__).parent.parent / "data"
+    data_csv = "train.csv"
+    train_df = pd.read_csv(data_base_path / data_csv)
+
+    example_data = load_relevant_data_subset(data_base_path / train_df["path"][1])
     fg = FeatureGenerator()
-    feat_dummy = fg(x_dummy)
+    feat_dummy = fg(example_data)
+
+    print("oi")
