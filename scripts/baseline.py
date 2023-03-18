@@ -20,6 +20,103 @@ def create_features(file_names: list[pathlib.Path]) -> npt.NDArray[np.float32]:
     return np.stack(features)
 
 
+def _select_data(sign_data: pd.DataFrame) -> npt.NDArray[np.floating]:
+    # handle indices START TODO find better solution
+    left_hand = list(range(468, 489))
+    right_hand = list(range(522, 543))
+    pose = list(range(489, 522))
+    lip = [
+        61,
+        185,
+        40,
+        39,
+        37,
+        0,
+        267,
+        269,
+        270,
+        409,
+        291,
+        146,
+        91,
+        181,
+        84,
+        17,
+        314,
+        405,
+        321,
+        375,
+        78,
+        191,
+        80,
+        81,
+        82,
+        13,
+        312,
+        311,
+        310,
+        415,
+        95,
+        88,
+        178,
+        87,
+        14,
+        317,
+        402,
+        318,
+        324,
+        308,
+    ]
+    node_indices = left_hand + right_hand + pose
+    # node_indices = list(range(543))
+    # handle indices END
+    required_columns = pd.Series(["x", "y", "z"])
+    if not required_columns.isin(sign_data.columns).all():
+        raise ValueError("Missing columns.")
+    num_total_nodes = 543
+    sign_coords = sign_data[["x", "y", "z"]].values
+    sign_coords = np.reshape(sign_coords, (-1, num_total_nodes, 3))
+    return sign_coords[:, node_indices, :]
+
+
+def _compute_features(
+    sign_coords: npt.NDArray[np.float32],
+) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+    input_shape = sign_coords.shape
+    if not len(input_shape) == 3 and not input_shape[2] == 3:
+        raise ValueError
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", category=RuntimeWarning, message=r"Mean of empty slice"
+        )
+        mean_feature = np.nanmean(sign_coords, axis=0)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", category=RuntimeWarning, message=r"All-NaN slice encountered"
+        )
+        std_feature = np.nanmedian(sign_coords, axis=0)
+    return np.nan_to_num(mean_feature), np.nan_to_num(std_feature)
+
+
+def _shape_features(
+    feature_data: tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]
+) -> npt.NDArray[np.float32]:
+    features = np.concatenate(feature_data, axis=1)
+    return features.flatten()
+
+
+def _load_sign_sequence(file_name: pathlib.Path) -> pd.DataFrame:
+    return pd.read_parquet(file_name, columns=["x", "y", "z"])
+
+
+def _create_features(file_name: pathlib.Path) -> npt.NDArray[np.float32]:
+    sign_sequence = _load_sign_sequence(file_name)
+    sign_sequence: npt.NDArray[np.floating] = _select_data(sign_sequence)
+    sign_sequence: npt.NDArray[np.float32] = sign_sequence.astype(np.float32)
+    features = _compute_features(sign_sequence)
+    return _shape_features(features)
+
+
 class Dataset(torch_data.Dataset):
     def __init__(
         self, feature_matrix: npt.NDArray[np.float32], labels: npt.NDArray[np.integer]
@@ -136,100 +233,3 @@ if __name__ == "__main__":
     valid_acc = eval(model, valid_dataloader)
     print("train acc", train_acc)
     print("valid acc", valid_acc)
-
-
-def _select_data(sign_data: pd.DataFrame) -> npt.NDArray[np.floating]:
-    # handle indices START TODO find better solution
-    left_hand = list(range(468, 489))
-    right_hand = list(range(522, 543))
-    pose = list(range(489, 522))
-    lip = [
-        61,
-        185,
-        40,
-        39,
-        37,
-        0,
-        267,
-        269,
-        270,
-        409,
-        291,
-        146,
-        91,
-        181,
-        84,
-        17,
-        314,
-        405,
-        321,
-        375,
-        78,
-        191,
-        80,
-        81,
-        82,
-        13,
-        312,
-        311,
-        310,
-        415,
-        95,
-        88,
-        178,
-        87,
-        14,
-        317,
-        402,
-        318,
-        324,
-        308,
-    ]
-    node_indices = left_hand + right_hand + pose + lip
-    # node_indices = list(range(543))
-    # handle indices END
-    required_columns = pd.Series(["x", "y", "z"])
-    if not required_columns.isin(sign_data.columns).all():
-        raise ValueError("Missing columns.")
-    num_total_nodes = 543
-    sign_coords = sign_data[["x", "y", "z"]].values
-    sign_coords = np.reshape(sign_coords, (-1, num_total_nodes, 3))
-    return sign_coords[:, node_indices, :]
-
-
-def _compute_features(
-    sign_coords: npt.NDArray[np.float32],
-) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-    input_shape = sign_coords.shape
-    if not len(input_shape) == 3 and not input_shape[2] == 3:
-        raise ValueError
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", category=RuntimeWarning, message=r"Mean of empty slice"
-        )
-        mean_feature = np.nanmean(sign_coords, axis=0)
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", category=RuntimeWarning, message=r"Degrees of freedom"
-        )
-        std_feature = np.nanmedian(sign_coords, axis=0)
-    return np.nan_to_num(mean_feature), np.nan_to_num(std_feature)
-
-
-def _shape_features(
-    feature_data: tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]
-) -> npt.NDArray[np.float32]:
-    features = np.concatenate(feature_data, axis=1)
-    return features.flatten()
-
-
-def _load_sign_sequence(file_name: pathlib.Path) -> pd.DataFrame:
-    return pd.read_parquet(file_name, columns=["x", "y", "z"])
-
-
-def _create_features(file_name: pathlib.Path) -> npt.NDArray[np.float32]:
-    sign_sequence = _load_sign_sequence(file_name)
-    sign_sequence: npt.NDArray[np.floating] = _select_data(sign_sequence)
-    sign_sequence: npt.NDArray[np.float32] = sign_sequence.astype(np.float32)
-    features = _compute_features(sign_sequence)
-    return _shape_features(features)
