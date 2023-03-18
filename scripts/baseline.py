@@ -148,7 +148,11 @@ class Net(torch.nn.Module):
         return x
 
 
-def eval(model: torch.nn.Module, dataloader: torch_data.DataLoader) -> float:
+def eval(
+    model: torch.nn.Module,
+    dataloader: torch_data.DataLoader,
+    device: torch.device,
+) -> float:
     model.eval()
     total = 0
     correct = 0
@@ -229,7 +233,7 @@ if __name__ == "__main__":
     valid_dataloader = torch_data.DataLoader(
         valid_dataset, batch_size=batch_size, shuffle=False
     )
-    train_acc = eval(model, train_dataloader)
-    valid_acc = eval(model, valid_dataloader)
+    train_acc = eval(model, train_dataloader, device)
+    valid_acc = eval(model, valid_dataloader, device)
     print("train acc", train_acc)
     print("valid acc", valid_acc)
