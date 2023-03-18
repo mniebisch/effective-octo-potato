@@ -40,31 +40,27 @@ class FeatureGenerator(torch.nn.Module):
             used.
 
         """
-        # input_shape = x.shape
-        # if not len(input_shape) == 3 and not input_shape[2] == 3:
-        #     raise ValueError("Invalid input shape.")
-        # x = torch.from_numpy(x)
-        x = self._select_landmarks(x)
-        features = self._compute_features(x)
-        return self._shape_features(features)
+        lefth_x = x[:, 468:489, :].contiguous().view(-1, 21 * 3)
+        pose_x = x[:, 489:522, :].contiguous().view(-1, 33 * 3)
+        righth_x = x[:, 522:, :].contiguous().view(-1, 21 * 3)
 
-    def _compute_features(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        mean_features = torch.nanmean(x, dim=0)
-        median_features = torch.nanmean(x, dim=0)
-        return (torch.nan_to_num(mean_features), torch.nan_to_num(median_features))
+        lefth_x = lefth_x[~torch.any(torch.isnan(lefth_x), dim=1), :]
+        righth_x = righth_x[~torch.any(torch.isnan(righth_x), dim=1), :]
 
-    def _select_landmarks(self, x: torch.Tensor) -> torch.Tensor:
-        left_hand = torch.arange(458, 489, dtype=torch.long)
-        right_hand = torch.arange(522, 543, dtype=torch.long)
-        pose = torch.arange(489, 522, dtype=torch.long)
-        landmark_indices = torch.cat([left_hand, right_hand, pose])
-        return x[:, landmark_indices, :]
+        x2m = torch.mean(lefth_x, 0)
+        x3m = torch.mean(pose_x, 0)
+        x4m = torch.mean(righth_x, 0)
 
-    def _shape_features(
-        self, features: tuple[torch.Tensor, torch.Tensor]
-    ) -> torch.Tensor:
-        features = torch.concatenate(features, dim=1)
-        return torch.flatten(features)
+        x2s = torch.std(lefth_x, 0)
+        x3s = torch.std(pose_x, 0)
+        x4s = torch.std(righth_x, 0)
+
+        xfeat = torch.cat([x2m, x3m, x4m, x2s, x3s, x4s], axis=0)
+        xfeat = torch.where(
+            torch.isnan(xfeat), torch.tensor(0.0, dtype=torch.float32), xfeat
+        )
+
+        return xfeat
 
 
 class Dataset(torch_data.Dataset):
@@ -162,7 +158,7 @@ if __name__ == "__main__":
     example_file = data_base_path / train_df["path"][1]
 
     # create/load features
-    feature_matrix_file_name = "baseline_mean_median2.npy"
+    feature_matrix_file_name = "baseline_mean_std_kaggle.npy"
     feature_matrix_file_name = data_base_path / feature_matrix_file_name
     fg = FeatureGenerator()
     if not feature_matrix_file_name.is_file():
