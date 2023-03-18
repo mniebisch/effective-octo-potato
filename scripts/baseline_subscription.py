@@ -30,7 +30,7 @@ class FeatureGenerator(torch.nn.Module):
         features = self._compute_features(x)
         return self._shape_features(features)
 
-    def _compute_features(self, x: torch.Tensor) -> tuple[torch.Tensor]:
+    def _compute_features(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         mean_features = torch.nanmean(x, dim=0)
         median_features = torch.nanmedian(x, dim=0)
         return torch.nan_to_num(mean_features), torch.nan_to_num(median_features)
