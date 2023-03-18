@@ -56,6 +56,33 @@ class SimpleNet(torch.nn.Module):
 
         return torch.mean(x, dim=-1)
 
+class SimplerNet(torch.nn.Module):
+    """Predicts the labels for a representation of all frames."""
+
+    def __init__(self, nr_inputs: int = 543 * 4, nr_outputs: int = 250):
+        super().__init__()
+
+        self.fc1 = torch.nn.Linear(nr_inputs, nr_outputs)
+        self.fc2 = torch.nn.Linear(nr_outputs, 1000)
+        self.fc3 = torch.nn.Linear(1000, nr_outputs)
+        
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x:torch.Tensor) -> torch.Tensor:
+        """
+        Simple MLP:
+
+        First Layer --------------------------------- + -> Prediction
+                    \                                /
+                     -> Second Layer -> Third Layer -
+        .
+        """
+        x = self.fc1(x)
+        x = self.relu(x)
+        y = self.fc2(x)
+        y = self.relu(y)
+        y = self.fc3(y)
+        return x + y
 
 if __name__ == "__main__":
     simplenet = SimpleNet()

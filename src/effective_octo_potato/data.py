@@ -48,6 +48,18 @@ class LandmarkDataset(torch_data.Dataset):
         label = self.labels[sign]
         return landmark_data, label
 
+class CovDataset(LandmarkDataset):
+    """Provide a datset that reporst the covariance matrix for each landmark."""
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+        """Provide the example corresponding to idx."""
+        landmark_data, label = super().__getitem__(idx)
+        landmark_data = landmark_data.view(-1,543,2)
+        landmark_data = landmark_data.transpose(0,1)
+        landmark_data = landmark_data - torch.mean(landmark_data, dim=1, keepdim = True)
+        landmark_cov = landmark_data.transpose(1,2) @ landmark_data
+
+        return landmark_cov.view(-1), label
 
 def load_parquet_file(
         file_path: pathlib.Path, 

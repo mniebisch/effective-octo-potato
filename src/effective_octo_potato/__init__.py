@@ -8,7 +8,7 @@ author = Michael Nibesch, Christian Reimers
 """
 
 from . import data
-from ._models import SimpleNet
+from ._models import SimpleNet, SimplerNet
 from ._split_train_test import split_train_test
 
 __all__ = [
