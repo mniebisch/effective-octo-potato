@@ -12,6 +12,7 @@ dependencies = [
     "pandas",
     "pyarrow",
     "tensorflow",
+    "tensorflow-probability",
     "tflite-runtime",
     "torch < 2.0.0",
     "tqdm",
