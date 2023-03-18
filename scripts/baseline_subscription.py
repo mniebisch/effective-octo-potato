@@ -1,4 +1,6 @@
 """
+Script based on:
+https://www.kaggle.com/code/mayukh18/end-to-end-pytorch-training-submission
 
 Usefule links:
     - https://glaringlee.github.io/onnx.html#supported-operators
