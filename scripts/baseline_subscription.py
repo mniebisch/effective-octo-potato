@@ -153,6 +153,45 @@ def _export_onnx_to_tensorflow(
     tensorflow_representation.export_graph(tensorflow_graph_path)
 
 
+def _create_tensorflow_inference_model(
+    feature_generator_path: pathlib.Path,
+    model_path: pathlib.Path,
+    output_path: pathlib.Path,
+) -> None:
+    class NetInference(tf.Module):
+        def __init__(self):
+            super().__init__()
+            self.feature_generator = tf.saved_model.load(feature_generator_path)
+            self.model = tf.saved_model.load(model_path)
+            self.feature_generator.trainable = False
+            self.model.trainable = False
+
+        @tf.function(
+            input_signature=[
+                tf.TensorSpec(
+                    shape=[None, 543, 3],
+                    dtype=tf.float32,
+                    name="inputs",
+                )
+            ]
+        )
+        def call(self, input):
+            output_tensors = {}
+            features = self.feature_generator(**{"input": input})["output"]
+            output_tensors["outputs"] = self.model(
+                **{"input": tf.expand_dims(features, 0)}
+            )["output"][0, :]
+            return output_tensors
+
+    tensorflow_model = NetInference()
+    output_path = str(output_path)
+    tf.saved_model.save(
+        tensorflow_model,
+        output_path,
+        signatures={"serving_default": tensorflow_model.call},
+    )
+
+
 def transform_model(
     model: torch.nn.Module,
     feature_generator: torch.nn.Module,
@@ -190,35 +229,11 @@ def transform_model(
     )
 
     # create tensorflow inference model
-    class NetInference(tf.Module):
-        def __init__(self):
-            super().__init__()
-            # TODO add next two lines as input arguments?
-            self.feature_generator = tf.saved_model.load(feature_tensorflow_path)
-            self.model = tf.saved_model.load(model_tensorflow_path)
-            self.feature_generator.trainable = False
-            self.model.trainable = False
-
-        @tf.function(
-            input_signature=[
-                tf.TensorSpec(shape=[None, 543, 3], dtype=tf.float32, name="inputs")
-            ]
-        )
-        def call(self, input):
-            output_tensors = {}
-            features = self.feature_generator(**{"input": input})["output"]
-            output_tensors["outputs"] = self.model(
-                **{"input": tf.expand_dims(features, 0)}
-            )["output"][0, :]
-            return output_tensors
-
-    tensorflow_model = NetInference()
-    inference_model_tensorflow_path = data_path / "inference_model"
-    inference_model_tensorflow_path = str(inference_model_tensorflow_path)
-    tf.saved_model.save(
-        tensorflow_model,
-        inference_model_tensorflow_path,
-        signatures={"serving_default": tensorflow_model.call},
+    inference_model_tensorflow_path: pathlib.Path = data_path / "inference_model"
+    _create_tensorflow_inference_model(
+        feature_generator_path=feature_tensorflow_path,
+        model_path=model_tensorflow_path,
+        output_path=inference_model_tensorflow_path,
     )
 
     # create tensorflow lite model for submission
