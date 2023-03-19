@@ -145,6 +145,14 @@ def _export_torch_to_onnx(
     )
 
 
+def _export_onnx_to_tensorflow(
+    onnx_file: pathlib.Path, tensorflow_graph_path: pathlib.Path
+) -> None:
+    onnx_representation = onnx.load(onnx_file)
+    tensorflow_representation = onnx_tf_backend.prepare(onnx_representation)
+    tensorflow_representation.export_graph(tensorflow_graph_path)
+
+
 def transform_model(
     model: torch.nn.Module,
     feature_generator: torch.nn.Module,
@@ -171,15 +179,15 @@ def transform_model(
 
     # transform feature generator to tensorflow
     feature_tensorflow_path = data_path / "tf_feature_generator"
-    onnx_feature = onnx.load(feature_onnx_file)
-    tensorflow_representation_feature = onnx_tf_backend.prepare(onnx_feature)
-    tensorflow_representation_feature.export_graph(feature_tensorflow_path)
+    _export_onnx_to_tensorflow(
+        onnx_file=feature_onnx_file, tensorflow_graph_path=feature_tensorflow_path
+    )
 
     # transform model to tensorflow
     model_tensorflow_path = data_path / "tf_model"
-    onnx_model = onnx.load(model_onnx_file)
-    tensorflow_representation_model = onnx_tf_backend.prepare(onnx_model)
-    tensorflow_representation_model.export_graph(model_tensorflow_path)
+    _export_onnx_to_tensorflow(
+        onnx_file=model_onnx_file, tensorflow_graph_path=model_tensorflow_path
+    )
 
     # create tensorflow inference model
     class NetInference(tf.Module):
