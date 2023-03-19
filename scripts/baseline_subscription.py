@@ -130,6 +130,21 @@ def create_features(
     return np.stack(features)
 
 
+def _export_torch_to_onnx(
+    model: torch.nn.Module, sample: torch.Tensor, output_file: pathlib.Path
+) -> None:
+    model.eval()
+    torch.onnx.export(
+        model,
+        sample,
+        output_file,
+        opset_version=12,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={"input": {0: "input"}},
+    )
+
+
 def transform_model(
     model: torch.nn.Module,
     feature_generator: torch.nn.Module,
@@ -140,30 +155,18 @@ def transform_model(
     feature_sample_input = torch.rand((50, 543, 3))
     feature_onnx_file = "feature_generator.onnx"
     feature_onnx_file = data_path / feature_onnx_file
-    feature_generator.eval()
-    torch.onnx.export(
-        feature_generator,
-        feature_sample_input,
-        feature_onnx_file,
-        opset_version=12,
-        input_names=["input"],
-        output_names=["output"],
-        dynamic_axes={"input": {0: "input"}},
+    _export_torch_to_onnx(
+        model=feature_generator,
+        sample=feature_sample_input,
+        output_file=feature_onnx_file,
     )
 
     # transform model to onnx
     model_sample_input = torch.rand((1, num_model_input_features)).cuda()
     model_onnx_file = "model.onnx"
     model_onnx_file = data_path / model_onnx_file
-    model.eval()
-    torch.onnx.export(
-        model,
-        model_sample_input,
-        model_onnx_file,
-        opset_version=12,
-        input_names=["input"],
-        output_names=["output"],
-        dynamic_axes={"input": {0: "input"}},
+    _export_torch_to_onnx(
+        model=model, sample=model_sample_input, output_file=model_onnx_file
     )
 
     # transform feature generator to tensorflow
