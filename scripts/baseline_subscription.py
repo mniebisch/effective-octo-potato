@@ -192,6 +192,17 @@ def _create_tensorflow_inference_model(
     )
 
 
+def _export_tensorflow_lite_model(
+    inference_model_path: pathlib.Path, tensorflow_lite_file: pathlib.Path
+) -> None:
+    inference_model_path = str(inference_model_path)
+    converter = tf.lite.TFLiteConverter.from_saved_model(inference_model_path)
+    tflite_model = converter.convert()
+
+    with open(tensorflow_lite_file, "wb") as f:
+        f.write(tflite_model)
+
+
 def transform_model(
     model: torch.nn.Module,
     feature_generator: torch.nn.Module,
@@ -237,15 +248,13 @@ def transform_model(
     )
 
     # create tensorflow lite model for submission
-    converter = tf.lite.TFLiteConverter.from_saved_model(
-        inference_model_tensorflow_path
-    )
-    tflite_model = converter.convert()
     tflite_model_file = "model.tflite"
     tflite_model_file = data_path / tflite_model_file
 
-    with open(tflite_model_file, "wb") as f:
-        f.write(tflite_model)
+    _export_tensorflow_lite_model(
+        inference_model_path=inference_model_tensorflow_path,
+        tensorflow_lite_file=tflite_model_file,
+    )
 
 
 def eval(
