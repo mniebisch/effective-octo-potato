@@ -290,7 +290,20 @@ def load_labels(data_dir: pathlib.Path, labels: pd.Series) -> npt.NDArray[np.int
     return labels.values
 
 
-# def get
+def handle_training_data(
+    raw_dir: pathlib.Path,
+    feature_dir: pathlib.Path,
+    feature_generator: torch.nn.Module,
+    feature_file_name: str,
+) -> npt.NDArray[np.float32]:
+    feature_matrix_file_name = feature_dir / feature_file_name
+    if not feature_matrix_file_name.is_file():
+        file_paths = [raw_dir / filename for filename in train_df["path"].tolist()]
+        feature_matrix = create_features(file_paths, feature_generator)
+        np.save(feature_matrix_file_name, feature_matrix)
+    else:
+        feature_matrix = np.load(feature_matrix_file_name)
+    return feature_matrix
 
 
 if __name__ == "__main__":
@@ -305,20 +318,15 @@ if __name__ == "__main__":
     train_df = pd.read_csv(data_base_path / data_csv)
     labels = load_labels(data_dir=data_base_path, labels=train_df["sign"])
 
-    example_file = data_base_path / train_df["path"][1]
-
     # create/load features
     feature_matrix_file_name = "baseline_mean_std_kaggle.npy"
-    feature_matrix_file_name = data_base_path / feature_matrix_file_name
     fg = FeatureGenerator()
-    if not feature_matrix_file_name.is_file():
-        file_paths = [
-            data_base_path / filename for filename in train_df["path"].tolist()
-        ]
-        feature_matrix = create_features(file_paths, fg)
-        np.save(feature_matrix_file_name, feature_matrix)
-    else:
-        feature_matrix = np.load(feature_matrix_file_name)
+    feature_matrix = handle_training_data(
+        raw_dir=data_base_path,
+        feature_dir=data_base_path,
+        feature_generator=fg,
+        feature_file_name=feature_matrix_file_name,
+    )
 
     # split data
     split_ind = 70000
