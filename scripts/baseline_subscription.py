@@ -308,6 +308,7 @@ def handle_training_data(
 
 if __name__ == "__main__":
     data_base_path = pathlib.Path(__file__).parent.parent / "data"
+    output_base_path = pathlib.Path(__file__).parent.parent / "data"
 
     # hyperparamters
     batch_size = 64
@@ -323,7 +324,7 @@ if __name__ == "__main__":
     fg = FeatureGenerator()
     feature_matrix = handle_training_data(
         raw_dir=data_base_path,
-        feature_dir=data_base_path,
+        feature_dir=output_base_path,
         feature_generator=fg,
         feature_file_name=feature_matrix_file_name,
     )
@@ -372,6 +373,6 @@ if __name__ == "__main__":
     transform_model(
         model=model,
         feature_generator=fg,
-        data_path=data_base_path,
+        data_path=output_base_path,
         num_model_input_features=450,
     )
