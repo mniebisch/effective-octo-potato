@@ -20,7 +20,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = []
+dev = ["mypy"]
 test = []
 
 [tool.mypy]
