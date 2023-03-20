@@ -184,7 +184,7 @@ def _create_tensorflow_inference_model(
             return output_tensors
 
     tensorflow_model = NetInference()
-    output_path = str(output_path)
+    output_path: str = str(output_path)
     tf.saved_model.save(
         tensorflow_model,
         output_path,
@@ -195,7 +195,7 @@ def _create_tensorflow_inference_model(
 def _export_tensorflow_lite_model(
     inference_model_path: pathlib.Path, tensorflow_lite_file: pathlib.Path
 ) -> None:
-    inference_model_path = str(inference_model_path)
+    inference_model_path: str = str(inference_model_path)
     converter = tf.lite.TFLiteConverter.from_saved_model(inference_model_path)
     tflite_model = converter.convert()
 
@@ -277,6 +277,22 @@ def eval(
     return correct / total
 
 
+def _get_label_map(data_dir: pathlib.Path) -> dict[str, int]:
+    label_csv = "sign_to_prediction_index_map.json"
+    with open(data_dir / label_csv) as file:
+        label_map = json.load(file)
+    return label_map
+
+
+def load_labels(data_dir: pathlib.Path, labels: pd.Series) -> npt.NDArray[np.integer]:
+    label_map = _get_label_map(data_dir=data_dir)
+    labels = labels.replace(label_map)
+    return labels.values
+
+
+# def get
+
+
 if __name__ == "__main__":
     data_base_path = pathlib.Path(__file__).parent.parent / "data"
 
@@ -287,12 +303,7 @@ if __name__ == "__main__":
     # load/process labels
     data_csv = "train.csv"
     train_df = pd.read_csv(data_base_path / data_csv)
-    label_csv = "sign_to_prediction_index_map.json"
-    labels = train_df["sign"]
-    with open(data_base_path / label_csv) as file:
-        label_map = json.load(file)
-    labels = labels.replace(label_map)
-    labels: npt.NDArray[np.integer] = labels.values
+    labels = load_labels(data_dir=data_base_path, labels=train_df["sign"])
 
     example_file = data_base_path / train_df["path"][1]
 
@@ -320,7 +331,7 @@ if __name__ == "__main__":
     )
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     input_dim = train_matrix.shape[1]
-    output_dim = len(label_map)
+    output_dim = len(_get_label_map(data_base_path))
     model = Net(input_dim=input_dim, output_dim=output_dim)
     model.to(device)
     criterion = torch.nn.CrossEntropyLoss()
