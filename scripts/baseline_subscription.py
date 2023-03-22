@@ -11,6 +11,7 @@ import functools
 import json
 import multiprocessing as mp
 import pathlib
+from typing import Dict, List, Tuple
 
 import numpy as np
 import onnx
@@ -82,7 +83,7 @@ class Dataset(torch_data.Dataset):
         self.feature_matrix = feature_matrix
         self.labels = labels
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         features = self.feature_matrix[idx]
         return torch.Tensor(features), self.labels[idx]
 
@@ -116,7 +117,7 @@ def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
 
 
 def create_features(
-    file_names: list[pathlib.Path], feature_generator: torch.nn.Module
+    file_names: List[pathlib.Path], feature_generator: torch.nn.Module
 ) -> npt.NDArray[np.float32]:
     _create_features_fg = functools.partial(
         _create_features, feature_generator=feature_generator
@@ -277,7 +278,7 @@ def eval(
     return correct / total
 
 
-def _get_label_map(data_dir: pathlib.Path) -> dict[str, int]:
+def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
     label_csv = "sign_to_prediction_index_map.json"
     with open(data_dir / label_csv) as file:
         label_map = json.load(file)
