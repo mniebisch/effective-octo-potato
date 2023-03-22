@@ -21,6 +21,7 @@ import torch
 import tqdm
 from numpy import typing as npt
 from onnx_tf import backend as onnx_tf_backend
+from sklearn import model_selection
 from torch.utils import data as torch_data
 
 
@@ -307,10 +308,22 @@ def handle_training_data(
     return feature_matrix
 
 
+def get_data_split(
+    group_labels: pd.Series, train_size: float = 0.8, is_submission: bool = True
+) -> Tuple[npt.NDArray[np.integer], npt.NDArray[np.integer]]:
+    if is_submission:
+        raise NotImplementedError
+
+    splitter = model_selection.GroupShuffleSplit(n_splits=1, train_size=train_size)
+    group_split = splitter.split(None, None, group_labels)
+    return next(group_split)
+
+
 if __name__ == "__main__":
     data_base_path = pathlib.Path(__file__).parent.parent / "data"
     output_base_path = pathlib.Path(__file__).parent.parent / "data"
 
+    is_submission = False
     # hyperparamters
     batch_size = 64
     epochs = 1
@@ -331,9 +344,14 @@ if __name__ == "__main__":
     )
 
     # split data
-    split_ind = 70000
-    train_matrix, valid_matrix = feature_matrix[:split_ind], feature_matrix[split_ind:]
-    train_labels, valid_labels = labels[:split_ind], labels[split_ind:]
+    train_indices, valid_indices = get_data_split(
+        group_labels=train_df["participant_id"], is_submission=is_submission
+    )
+    train_matrix, valid_matrix = (
+        feature_matrix[train_indices],
+        feature_matrix[valid_indices],
+    )
+    train_labels, valid_labels = labels[train_indices], labels[valid_indices]
 
     train_dataset = Dataset(train_matrix, train_labels)
     train_dataloader = torch_data.DataLoader(
