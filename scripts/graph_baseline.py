@@ -1,15 +1,68 @@
 import collections
+import json
 import pathlib
+from typing import Dict, List
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import torch
+import torch.nn.functional as torch_F
 import torch_geometric.data as pyg_data
+import torch_geometric.loader as pyg_loader
+import torch_geometric.nn as pyg_nn
 import torch_geometric.utils as pyg_utils
+import tqdm
+from torch_geometric.nn import GCNConv
 
 # TODO get edge based on media type descriptions
 # TODO create multi-graph dataset similar to TUDataset (Mutag) (pyg)
 # https://colab.research.google.com/drive/1I8a0DfQ3fI7Njc62__mVXUlcAleUclnb?usp=sharing#scrollTo=j11WiUr-PRH_
+
+
+def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
+    label_csv = "sign_to_prediction_index_map.json"
+    with open(data_dir / label_csv) as file:
+        label_map = json.load(file)
+    return label_map
+
+
+def load_labels(data_dir: pathlib.Path, labels: pd.Series) -> npt.NDArray[np.integer]:
+    label_map = _get_label_map(data_dir=data_dir)
+    labels = labels.replace(label_map)
+    return labels.values
+
+
+def create_pyg_graph(
+    node_features: npt.NDArray[np.float32], edge_matrix: torch.Tensor, label: int
+) -> pyg_data.Data:
+    node_features = node_features.reshape((75, 6))
+    node_features = torch.tensor(node_features, dtype=torch.float32)
+    return pyg_data.Data(x=node_features, edge_index=edge_matrix, y=label)
+
+
+class GCN(torch.nn.Module):
+    def __init__(
+        self, num_node_features: int, hidden_channels: int, num_classes: int
+    ) -> None:
+        super().__init__()
+        self.conv1 = pyg_nn.GCNConv(num_node_features, hidden_channels)
+        self.conv2 = pyg_nn.GCNConv(hidden_channels, hidden_channels)
+        self.conv3 = pyg_nn.GCNConv(hidden_channels, hidden_channels)
+        self.linear = torch.nn.Linear(hidden_channels, num_classes)
+
+    def forward(
+        self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor
+    ) -> torch.Tensor:
+        x = self.conv1(x, edge_index)
+        x = torch.nn.functional.relu(x)
+        x = self.conv2(x, edge_index)
+        x = torch.nn.functional.relu(x)
+        x = self.conv3(x, edge_index)
+        x = pyg_nn.global_mean_pool(x, batch)
+        x = self.linear(x)
+        return x
+
 
 if __name__ == "__main__":
     data_base_path = pathlib.Path(__file__).parent.parent / "data"
@@ -17,6 +70,7 @@ if __name__ == "__main__":
     # load/process labels
     data_csv = "train.csv"
     train_df = pd.read_csv(data_base_path / data_csv)
+    labels = load_labels(data_dir=data_base_path, labels=train_df["sign"])
 
     example_data = pd.read_parquet(data_base_path / train_df["path"][0])
 
@@ -122,13 +176,28 @@ if __name__ == "__main__":
     feature_matrix = np.load(data_base_path / feature_matrix_file_name)
 
     example_graph = feature_matrix[0]
-    example_graph = example_graph.reshape((75, 6))
 
     edge_matrix = torch.tensor(graph_edges, dtype=torch.int).T
+    edge_matrix = pyg_utils.to_undirected(edge_matrix)
 
-    sign_example = pyg_data.Data(
-        x=torch.tensor(example_graph, dtype=torch.float32),
-        edge_index=pyg_utils.to_undirected(edge_matrix),
+    graphs: List[pyg_data.Data] = [
+        create_pyg_graph(node_features, edge_matrix, label)
+        for node_features, label in tqdm.tqdm(zip(feature_matrix, labels))
+    ]
+
+    # pyg stuff
+    loader = pyg_loader.DataLoader(graphs, batch_size=4)
+    model = GCN(
+        num_node_features=graphs[0].num_node_features,
+        hidden_channels=64,
+        num_classes=250,
     )
 
-    print(example_data.head())
+    criterion = torch.nn.CrossEntropyLoss()
+
+    for data in loader:
+        prediction = model(data.x, data.edge_index, data.batch)
+        target = torch.tensor(data.y, dtype=torch.long)
+        loss = criterion(prediction, target)
+
+    print("oi")
