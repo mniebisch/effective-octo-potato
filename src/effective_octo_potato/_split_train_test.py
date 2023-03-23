@@ -8,6 +8,8 @@ the test.csv contains the examples of signers 61333, 36257, 25571, 37555 and
 author = Christian Reimers
 credit = Team tbd.
 """
+from __future__ import annotations 
+
 import csv
 import pathlib
 
@@ -40,14 +42,24 @@ def split_train_test(
                 train_writer.writerow(row)
 
 if __name__ == "__main__":
-    original_data_path = pathlib.Path("../data/ori_train.csv")
-    train_path = pathlib.Path("../data/train.csv")
-    test_path = pathlib.Path("../data/test.csv")
+    original_data_path = pathlib.Path("../../data/ori_train.csv")
+    train_path = pathlib.Path("../../data/train_.csv")
+    test_path = pathlib.Path("../../data/test.csv")
+    train_val_path = pathlib.Path("../../data/train.csv")
+    val_path = pathlib.Path("../../data/val.csv")
     test_signers = (61333, 36257, 25571, 37555, 22343)
+    val_signers = (26734,)
 
     split_train_test(
         original_data_path,
         train_path,
         test_path,
         test_signers,
+    )
+
+    split_train_test(
+            train_path,
+            train_val_path,
+            val_path,
+            val_signers,
     )

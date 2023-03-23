@@ -12,6 +12,7 @@ import json
 import pathlib
 from typing import TYPE_CHECKING
 
+import matplotlib.pyplot as plt
 import numpy as np
 import onnx
 import onnx_tf
@@ -30,6 +31,7 @@ class FeatureGen(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
+        self.output_shape = 3258
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Convert the features."""
@@ -58,6 +60,102 @@ class FeatureGen(torch.nn.Module):
             xfeat,
         )
 
+class FeatureGen2(torch.nn.Module):
+    """
+    Convert the features (n_frames, 543, 3) into (n_features,).
+    
+    In this feature gen, we heavyly reduce the number of landmarks.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.output_shape = 270
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Convert the features."""
+        face_x = x[:, :468, :].contiguous()
+        face_x = torch.mean(face_x, dim = 1)
+        pose_x = x[:, (489 + 23, 489 + 24), :].contiguous().view(-1, 2 * 3)
+        lefth_x = x[:, 468:489, :].contiguous().view(-1, 21 * 3)
+        righth_x = x[:, 522:, :].contiguous().view(-1, 21 * 3)
+
+        lefth_x = lefth_x[~torch.any(torch.isnan(lefth_x), dim=1), :]
+        righth_x = righth_x[~torch.any(torch.isnan(righth_x), dim=1), :]
+
+        x1m = torch.mean(face_x, 0)
+        x2m = torch.mean(lefth_x, 0)
+        x3m = torch.mean(pose_x, 0)
+        x4m = torch.mean(righth_x, 0)
+
+        x1s = torch.std(face_x, 0)
+        x2s = torch.std(lefth_x, 0)
+        x3s = torch.std(pose_x, 0)
+        x4s = torch.std(righth_x, 0)
+
+        xfeat = torch.cat([x1m, x2m, x3m, x4m, x1s, x2s, x3s, x4s], axis=0)
+        return torch.where(
+            torch.isnan(xfeat),
+            torch.tensor(0.0, dtype=torch.float32),
+            xfeat,
+        )
+
+class FeatureGen3(torch.nn.Module):
+    """
+    Convert the features (n_frames, 543, 3) into (n_features,).
+    
+    In this feature gen, we heavyly reduce the number of landmarks.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.output_shape = 639
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Convert the features."""
+        face_x = x[:, :468, :].contiguous()
+        pose_x = x[:, (489 + 23, 489 + 24), :].contiguous().view(-1, 2 * 3) 
+        x1m = torch.mean(face_x, (0, 1))
+        x3m = torch.mean(pose_x, 0)
+
+        nr_frames = x.shape[0]
+        frames = (0, (nr_frames - 1) / 4, (nr_frames-1) / 2, (nr_frames-1) * 3 / 4, nr_frames-1)
+
+        lefth_x = x[:, 468:489, :]
+        lefth_0 = lefth_x[0]
+        lefth_1 = (frames[1] - int(frames[1])) * lefth_x[int(frames[1])] + (frames[1] -1 - int(frames[1])) * lefth_x[int(frames[1]) + 1]
+        lefth_2 = (frames[2] - int(frames[2])) * lefth_x[int(frames[2])] + (frames[2] -1 - int(frames[2])) * lefth_x[int(frames[2]) + 1]
+        lefth_3 = (frames[3] - int(frames[3])) * lefth_x[int(frames[3])] + (frames[3] -1 - int(frames[3])) * lefth_x[int(frames[3]) + 1]
+        lefth_4 = lefth_x[-1]
+
+        lefth_x = torch.concatenate([lefth_0, lefth_1, lefth_2, lefth_3, lefth_4], axis = 0)
+        lefth_x_anker = lefth_x[:,0:1]
+        lefth_x = lefth_x - lefth_x_anker
+        lefth_x[:,0:1] = lefth_x_anker
+        lefth_x = lefth_x.contiguous().view(15 * 21)
+
+
+
+        righth_x = x[:, 522:, :]
+        righth_0 = righth_x[0]
+        righth_1 = (frames[1] - int(frames[1])) * righth_x[int(frames[1])] + (frames[1] -1 - int(frames[1])) * righth_x[int(frames[1]) + 1]
+        righth_2 = (frames[2] - int(frames[2])) * righth_x[int(frames[2])] + (frames[2] -1 - int(frames[2])) * righth_x[int(frames[2]) + 1]
+        righth_3 = (frames[3] - int(frames[3])) * righth_x[int(frames[3])] + (frames[3] -1 - int(frames[3])) * righth_x[int(frames[3]) + 1]
+        righth_4 = righth_x[-1]
+        
+        righth_x = torch.concatenate([righth_0, righth_1, righth_2, righth_3, righth_4], axis = 0)
+        righth_x_anker = righth_x[:,0:1]
+        righth_x = righth_x - righth_x_anker
+        righth_x[:,0:1] = righth_x_anker
+        righth_x = righth_x.contiguous().view(15 * 21)
+
+ 
+        xfeat = torch.cat([x1m, x3m, lefth_x, righth_x], axis=0)
+        return torch.where(
+            torch.isnan(xfeat),
+            torch.tensor(0.0, dtype=torch.float32),
+            xfeat,
+        )
+
 
 class ASLModel(torch.nn.Module):
     """
@@ -66,25 +164,56 @@ class ASLModel(torch.nn.Module):
     :param p: The dropout percentage
     """
 
-    def __init__(self, p: float):
+    def __init__(self, 
+            p: float, 
+            nr_inputs: int = 3258,
+            mean: torch.Tensor | None = None,
+            inv_std: torch.Tensor | None = None,
+            nr_of_blocks: int = 3,
+            size: int = 512,
+    ):
         super().__init__()
+
+        if mean is None:
+            mean = torch.zeros(nr_inputs)
+        if inv_std is None:
+            inv_std = torch.ones(nr_inputs)
+            
+        self.mean = mean.unsqueeze(0)
+        self.inv_std = inv_std.unsqueeze(0)
+
         self.dropout = torch.nn.Dropout(p)
-        self.fc1 = torch.nn.Linear(3258, 250)
-        self.fc2 = torch.nn.Linear(250, 512)
-        self.fc3 = torch.nn.Linear(512, 250)
+        self.fc1 = torch.nn.Linear(nr_inputs, size)
+        self.block_layer = torch.nn.ModuleList([
+            torch.nn.Linear(size, 2 * size),
+            torch.nn.Linear(2 * size, size),
+            ] * nr_of_blocks)
+        
+        self.final_layer = torch.nn.Linear(size, 250)
         self.relu = torch.nn.ReLU()
+        self.nr_blocks = nr_of_blocks
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Infer the sign from the recordings."""
-        x = self.fc1(x)
-        y = self.relu(x)
-        y = self.dropout(y)
-        y = self.fc2(y)
-        y = self.relu(y)
-        y = self.dropout(y)
-        y = self.fc3(y)
+        
 
-        return x + y
+        x = (x - self.mean) * self.inv_std
+
+        x = self.fc1(x)
+        
+        for i in range(self.nr_blocks):
+            y = self.relu(x)
+            y = self.dropout(y)
+            y = self.block_layer[2 * i](y)
+            y = self.relu(y)
+            y = self.dropout(y)
+            y = self.block_layer[2 * i + 1](y)
+
+            x = x + y
+        x = self.relu(x)
+
+        return self.final_layer(x)
 
 
 class ASLData(torch.utils.data.Dataset):
@@ -96,7 +225,7 @@ class ASLData(torch.utils.data.Dataset):
     """
 
     def __init__(self, datax: torch.Tensor, datay: torch.Tensor):
-        self.datax = (datax - datax.mean(axis=0)) / datax.std(axis=0)
+        self.datax = datax
         self.datay = datay
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -177,7 +306,7 @@ def convert_and_save_data(
     """Load the data, convert it and store it as a numpy array."""
     dataframe = pd.read_csv(train_file)
     dataframe["label"] = dataframe["sign"].map(label_map)
-    npdata = np.zeros((dataframe.shape[0], 3258))
+    npdata = np.zeros((dataframe.shape[0], feature_converter.output_shape))
     nplabels = np.zeros(dataframe.shape[0])
 
     def convert_row(
@@ -208,6 +337,9 @@ def train(
     trainy: npt.NDArray[np.float32],
     testx: npt.NDArray[np.float32],
     testy: npt.NDArray[np.float32],
+    valx: npt.NDArray[np.float32],
+    valy: npt.NDArray[np.float32],
+    model: torch.nn.Module,
     epochs: int = 42,
     t_0: int = 6,
     t_mult: int = 2,
@@ -222,6 +354,8 @@ def train(
     :param trainy: the labels for the training set
     :param testx: the test set inputs to the neural network
     :param testy: the test labels
+    :param valx: the features of the validation samples
+    :param valy: the labels for the validation samples
     :param epochs: the number of epochs for which the neural network should be
         trained
     :param T_0: Parameter for the Scheduler
@@ -233,21 +367,27 @@ def train(
     """
     train_data = ASLData(trainx, trainy)
     test_data = ASLData(testx, testy)
+    val_data = ASLData(valx, valy)
 
     train_loader = torch.utils.data.DataLoader(
         train_data,
         batch_size=batch_size,
-        num_workers=4,
+        num_workers=0,
         shuffle=True,
     )
     test_loader = torch.utils.data.DataLoader(
         test_data,
         batch_size=batch_size,
-        num_workers=4,
-        shuffle=True,
+        num_workers=0,
+        shuffle=False,
+    )
+    val_loader = torch.utils.data.DataLoader(
+        val_data,
+        batch_size = batch_size,
+        num_workers = 0,
+        shuffle = False,
     )
 
-    model = ASLModel(p)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
@@ -290,6 +430,34 @@ def train(
             )
 
         scheduler.step()
+        
+        val_loss_sum = 0
+        val_correct = 0
+        val_total = 0
+        val_bar = tqdm.tqdm(val_loader)
+        val_bar.set_description(f"Epoch {i}")
+        for batch_np, label_np in val_bar:
+            batch = torch.Tensor(batch_np).float()
+            label = torch.Tensor(label_np).long()
+
+            output = model(batch)
+
+            loss = criterion(output, label)
+
+            val_loss_sum = val_loss_sum + loss.item()
+            val_correct = val_correct + np.sum(
+                np.argmax(output.detach().cpu().numpy(), axis=1)
+                == label.cpu().numpy(),
+            )
+            val_total = val_total + 1
+            val_bar.set_postfix(
+                {
+                    "val loss": val_loss_sum / (val_total * batch_size),
+                    "val acc": val_correct / len(val_data),
+                },
+            )
+
+
 
     test_loss_sum = 0
     test_correct = 0
@@ -333,6 +501,7 @@ def create_submission(
     onnx_asl_model_path: pathlib.Path,
     tf_model_path: pathlib.Path,
     model: torch.nn.Module,
+    nr_inputs: int = 3258,
 ) -> None:
     """
     Create a submission.
@@ -346,7 +515,7 @@ def create_submission(
     :param model: The model that should be incuded in the tflite.
     """
     sample_input_feature_gen = torch.rand((50, 543, 3))
-    sample_input_model = torch.rand((1, 3258))
+    sample_input_model = torch.rand((1, nr_inputs))
 
     feature_converter.eval()
     model.eval()
@@ -388,6 +557,7 @@ def make_submission(
     tf_model_path: pathlib.Path,
     model: torch.nn.Module,
     tf_lite_path: pathlib.Path,
+    nr_inputs: int = 3258,
 ) -> None:
     """
     Create a submission.
@@ -409,9 +579,9 @@ def make_submission(
         onnx_asl_model_path=onnx_asl_model_path,
         tf_model_path=tf_model_path,
         model=model,
+        nr_inputs = nr_inputs,
     )
 
-    print(tf_feat_gen_path, tf_model_path)
     mytfmodel = ASLInferModel(
         tf_feat_gen_path,
         tf_model_path,
@@ -429,6 +599,51 @@ def make_submission(
     with tf_lite_path.open("wb") as file_pointer:
         file_pointer.write(tflite_model)
 
+def create_confusion(model, trainx, trainy, testx, testy, 
+    batch_size: int = 64,
+):
+
+    train_data = ASLData(trainx, trainy)
+    test_data = ASLData(testx, testy)
+
+    train_loader = torch.utils.data.DataLoader(
+        train_data,
+        batch_size=batch_size,
+        num_workers=0,
+        shuffle=True,
+    )
+    test_loader = torch.utils.data.DataLoader(
+        test_data,
+        batch_size=batch_size,
+        num_workers=0,
+        shuffle=True,
+    )
+
+    confusion_test = np.zeros((250, 250))
+    test_bar = tqdm.tqdm(test_loader)
+    test_bar.set_description("Test")
+    for batch_np, label_np in test_bar:
+        batch = torch.Tensor(batch_np).float()
+        label = torch.Tensor(label_np).long()
+        
+        output = model(batch)
+
+        #loss = criterion(output, label)
+        #test_loss_sum = test_loss_sum + loss.item()
+
+        pred = np.argmax(output.detach().cpu().numpy(), axis=1)
+        label = label.cpu().numpy()
+        
+        for i in range(pred.shape[0]):
+            confusion_test[pred[i], label[i]] += 1
+
+    plt.figure()
+    plt.imshow(confusion_test)
+    plt.colorbar()
+    plt.show()
+    plt.close()
+    
+
 
 if __name__ == "__main__":
     # define some constants
@@ -443,6 +658,10 @@ if __name__ == "__main__":
         "/home/reimers/Documents/Projects/ALS/effective-octo-potato/data/"
         "test.csv",
     )
+    val_file = pathlib.Path(
+        "/home/reimers/Documents/Projects/ALS/effective-octo-potato/data/"
+        "test.csv",
+    )
     label_map_ = json.load(
         pathlib.Path(
             "/home/reimers/Documents/Projects/ALS/effective-octo-potato/data/"
@@ -452,7 +671,9 @@ if __name__ == "__main__":
     train_feature_path = pathlib.Path("feature_data.npy")
     train_label_path = pathlib.Path("feature_labels.npy")
     test_feature_path = pathlib.Path("feature_data_test.npy")
-    test_label_path = pathlib.Path("featuer_labels_test.npy")
+    test_label_path = pathlib.Path("feature_labels_test.npy")
+    val_feature_path = pathlib.Path("feature_data_val.npy")
+    val_label_path = pathlib.Path("feature_labels_val.npy")
 
     onnx_feat_gen_path = pathlib.Path("feature_gen.onnx")
     onnx_model_path = pathlib.Path("asl_model.onnx")
@@ -462,7 +683,7 @@ if __name__ == "__main__":
     tf_path_combined = pathlib.Path("tf_infer_model")
     tf_lite_path = pathlib.Path("model.tflite")
 
-    feature_converter_ = FeatureGen()
+    feature_converter_ = FeatureGen3()
 
     try:
         trainx = np.load(train_feature_path)
@@ -476,6 +697,21 @@ if __name__ == "__main__":
             train_feature_path,
             train_label_path,
         )
+
+    try:
+        valx = np.load(val_feature_path)
+        valy = np.load(val_label_path)
+    except OSError:
+        valx, valy = convert_and_save_data(
+            val_file,
+            label_map_,
+            feature_converter_,
+            landmark_files_dir_,
+            val_feature_path,
+            val_label_path,
+        )
+
+
     try:
         testx = np.load(test_feature_path)
         testy = np.load(test_label_path)
@@ -489,16 +725,30 @@ if __name__ == "__main__":
             test_label_path,
         )
 
+    model = ASLModel(
+        p = 0.5, 
+        nr_inputs = feature_converter_.output_shape,
+        mean = torch.Tensor(trainx.mean(axis = 0)),
+        inv_std = torch.Tensor(1 / trainx.std(axis = 0)),
+        nr_of_blocks = 100,
+        size = 75
+    )
+
     model = train(
         trainx,
         trainy,
         testx,
         testy,
+        valx,
+        valy,
+        model,
         learning_rate=0.0003,
-        epochs=70,
-        p=0.5,
+        epochs=186,
+        p=0.8,
     )
 
+    create_confusion(model, trainx, trainy, testx, testy)
+    
     gc.collect()
 
     make_submission(
@@ -509,4 +759,5 @@ if __name__ == "__main__":
         tf_model_path=tf_model_path_,
         model=model,
         tf_lite_path=tf_lite_path,
+        nr_inputs = feature_converter_.output_shape,
     )
