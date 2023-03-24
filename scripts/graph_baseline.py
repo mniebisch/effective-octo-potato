@@ -13,11 +13,16 @@ import torch_geometric.loader as pyg_loader
 import torch_geometric.nn as pyg_nn
 import torch_geometric.utils as pyg_utils
 import tqdm
-from torch_geometric.nn import GCNConv
 
 # TODO get edge based on media type descriptions
 # TODO create multi-graph dataset similar to TUDataset (Mutag) (pyg)
 # https://colab.research.google.com/drive/1I8a0DfQ3fI7Njc62__mVXUlcAleUclnb?usp=sharing#scrollTo=j11WiUr-PRH_
+
+
+# https://stackoverflow.com/questions/53033556/how-should-the-learning-rate-change-as-the-batch-size-change
+
+# TODO Check if pyg can be transformed to tflight
+# for more check doc
 
 
 def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
@@ -185,19 +190,40 @@ if __name__ == "__main__":
         for node_features, label in tqdm.tqdm(zip(feature_matrix, labels))
     ]
 
+    # hyperparams
+    batch_size = 1024
+    epochs = 3
+
     # pyg stuff
-    loader = pyg_loader.DataLoader(graphs, batch_size=4)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    train_dataloader = pyg_loader.DataLoader(
+        graphs, batch_size=batch_size, shuffle=True
+    )
     model = GCN(
         num_node_features=graphs[0].num_node_features,
         hidden_channels=64,
         num_classes=250,
     )
-
+    model.to(device)
     criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=5 * 10e-2)
 
-    for data in loader:
-        prediction = model(data.x, data.edge_index, data.batch)
-        target = torch.tensor(data.y, dtype=torch.long)
-        loss = criterion(prediction, target)
+    model.train()
+    for epoch_idx in range(epochs):
+        batch_iterator = tqdm.tqdm(
+            train_dataloader, desc=f"Epoch: {epoch_idx+1:02d}/{epochs}"
+        )
+        for data in batch_iterator:
+            x = data.x.to(device)
+            edge_index = data.edge_index.to(device)
+            batch = data.batch.to(device)
+            optimizer.zero_grad()
+            prediction = model(x, edge_index, batch)
+            target = torch.tensor(data.y, dtype=torch.long)
+            target = target.to(device)
+            loss = criterion(prediction, target)
+            loss.backward()
+            optimizer.step()
+            batch_iterator.set_postfix({"loss": loss.item()})
 
     print("oi")
