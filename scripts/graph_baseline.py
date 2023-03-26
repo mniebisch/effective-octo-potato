@@ -5,6 +5,8 @@ from typing import Dict, List
 
 import numpy as np
 import numpy.typing as npt
+import onnx
+import onnxruntime
 import pandas as pd
 import torch
 import torch.nn.functional as torch_F
@@ -20,6 +22,8 @@ import tqdm
 
 
 # https://stackoverflow.com/questions/53033556/how-should-the-learning-rate-change-as-the-batch-size-change
+
+# https://pytorch.org/tutorials/advanced/super_resolution_with_onnxruntime.html
 
 # TODO Check if pyg can be transformed to tflight
 # for more check doc
@@ -182,7 +186,7 @@ if __name__ == "__main__":
 
     example_graph = feature_matrix[0]
 
-    edge_matrix = torch.tensor(graph_edges, dtype=torch.int).T
+    edge_matrix = torch.tensor(graph_edges, dtype=torch.int64).T
     edge_matrix = pyg_utils.to_undirected(edge_matrix)
 
     graphs: List[pyg_data.Data] = [
@@ -191,8 +195,8 @@ if __name__ == "__main__":
     ]
 
     # hyperparams
-    batch_size = 1024
-    epochs = 3
+    batch_size = 64
+    epochs = 1
 
     # pyg stuff
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -226,4 +230,76 @@ if __name__ == "__main__":
             optimizer.step()
             batch_iterator.set_postfix({"loss": loss.item()})
 
-    print("oi")
+    # onnx check
+    # # shapes
+    # x shape [num_nodes * batch_size, num_node_features]
+    # edge_index shape [2, batch_size * num_edges]
+    # batch shape [num_nodes * batch_size]
+    # model = torch_geometric.compile(model)
+    num_nodes_in = graphs[0].num_nodes
+    num_node_features_in = graphs[0].num_node_features
+    num_edges = graphs[0].num_edges
+
+    # # create input dummies
+    x_dummy = torch.randn(
+        num_nodes_in * batch_size,
+        num_node_features_in,
+        dtype=torch.float32,
+        requires_grad=True,
+    )
+    # 9856
+    edge_index_dummy = torch.tensor(
+        [(0, 1), (1, 0)] * (77 * batch_size), dtype=torch.int64
+    ).T
+    batch_dummy = torch.arange(batch_size, dtype=torch.int64)
+    batch_dummy: torch.Tensor = batch_dummy.repeat_interleave(num_nodes_in)
+
+    x_dummy = x_dummy.to(device)
+    edge_index_dummy = edge_index_dummy.to(device)
+    batch_dummy = batch_dummy.to(device)
+    # # perform onnx conversion
+    model.eval()
+    # model = torch.jit.script(model)
+    # model = torch.jit.trace(model)
+    torch.onnx.export(
+        model,
+        (x_dummy, edge_index_dummy, batch_dummy),
+        "graph_model.onnx",
+        export_params=True,
+        opset_version=16,
+        do_constant_folding=True,
+        input_names=["features", "edges", "batch"],
+        output_names=["output"],
+        dynamic_axes={
+            "features": [0],
+            "edges": [1],
+            "batch": [0],
+            "output": [0],
+        },
+    )
+
+    onnx_model = onnx.load("graph_model.onnx")
+    # raises Exception if something went wrong
+    check = onnx.checker.check_model(onnx_model)
+
+    # compare values
+    output_dummy = model(x_dummy, edge_index_dummy, batch_dummy)
+
+    def to_numpy(tensor):
+        return (
+            tensor.detach().cpu().numpy()
+            if tensor.requires_grad
+            else tensor.cpu().numpy()
+        )
+
+    ort_session = onnxruntime.InferenceSession("graph_model.onnx")
+    ort_inputs = {
+        ort_session.get_inputs()[0].name: to_numpy(x_dummy),
+        ort_session.get_inputs()[1].name: to_numpy(edge_index_dummy),
+        ort_session.get_inputs()[2].name: to_numpy(batch_dummy),
+    }
+    ort_outs = ort_session.run(None, ort_inputs)
+
+    np.testing.assert_allclose(
+        to_numpy(output_dummy), ort_outs[0], rtol=1e-03, atol=1e-05
+    )
