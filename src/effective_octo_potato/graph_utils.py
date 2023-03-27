@@ -55,12 +55,16 @@ def create_node_indices() -> torch.Tensor:
     return torch.cat([left_hand_indices, pose_indices, right_hand_indices])
 
 
-def create_node_mask() -> torch.Tensor:
-    num_input_nodes = 543
-    node_indices = create_node_indices()
+def create_node_mask(
+    node_indices: torch.Tensor, num_input_nodes: int = 543
+) -> torch.Tensor:
     node_mask = torch.zeros(num_input_nodes, dtype=torch.bool)
     node_mask[node_indices] = True
     return node_mask
+
+
+def create_one_hot(num_nodes: int) -> torch.Tensor:
+    return torch.nn.functional.one_hot(torch.arange(num_nodes))
 
 
 def _create_hand_edge_index() -> torch.Tensor:

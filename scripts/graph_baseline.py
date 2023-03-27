@@ -49,7 +49,7 @@ class FeatureGenerator(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.node_indices: torch.Tensor = create_node_indices()
-        self.node_mask: torch.Tensor = create_node_mask()
+        self.node_mask: torch.Tensor = create_node_mask(node_indices=self.node_indices)
         self.edge_index: torch.Tensor = create_edge_index()
         self.edge_index = apply_node_mask_to_edges(
             mask=self.node_mask, edge_index=self.edge_index
