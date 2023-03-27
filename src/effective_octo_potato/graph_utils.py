@@ -6,7 +6,7 @@ __all__ = [
     "create_edge_index",
     "create_left_hand_edge_index",
     "create_node_indices",
-    "create_node_indices",
+    "create_node_mask",
     "create_pose_edge_index",
     "create_right_hand_edge_index",
 ]
