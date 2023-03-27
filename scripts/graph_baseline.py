@@ -1,7 +1,7 @@
 import collections
 import json
 import pathlib
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -16,6 +16,13 @@ import torch_geometric.nn as pyg_nn
 import torch_geometric.utils as pyg_utils
 import tqdm
 
+from effective_octo_potato.graph_utils import (
+    apply_node_mask_to_edges,
+    create_edge_index,
+    create_node_indices,
+    create_node_mask,
+)
+
 # TODO get edge based on media type descriptions
 # TODO create multi-graph dataset similar to TUDataset (Mutag) (pyg)
 # https://colab.research.google.com/drive/1I8a0DfQ3fI7Njc62__mVXUlcAleUclnb?usp=sharing#scrollTo=j11WiUr-PRH_
@@ -27,6 +34,75 @@ import tqdm
 
 # TODO Check if pyg can be transformed to tflight
 # for more check doc
+
+
+def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
+    ROWS_PER_FRAME = 543  # number of landmarks per frame
+    data_columns = ["x", "y", "z"]
+    data = pd.read_parquet(pq_path, columns=data_columns)
+    n_frames = int(len(data) / ROWS_PER_FRAME)
+    data = data.values.reshape(n_frames, ROWS_PER_FRAME, len(data_columns))
+    return data.astype(np.float32)
+
+
+class FeatureGenerator(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.node_indices: torch.Tensor = create_node_indices()
+        self.node_mask: torch.Tensor = create_node_mask()
+        self.edge_index: torch.Tensor = create_edge_index()
+        self.edge_index = apply_node_mask_to_edges(
+            mask=self.node_mask, edge_index=self.edge_index
+        )
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Feature Transformation.
+        Args:
+            x: Sign sequence with shape:
+               [num frames, num landmarks, num spatial dims]
+               [num frames, 543, 3] of datatype float32.
+        Returns:
+            Feature vector representing sign sequence with shape
+            [num selected landmarks * num spatial coordinates  * num features].
+            Eg. num landmarks == 85 if only left hand, right hand, and pose are
+            used.
+        """
+        # TEMPORARY TO GET EVERYTHING RUNNING [START]
+        lefth_x = x[:, 468:489, :].contiguous().view(-1, 21 * 3)
+        pose_x = x[:, 489:522, :].contiguous().view(-1, 33 * 3)
+        righth_x = x[:, 522:, :].contiguous().view(-1, 21 * 3)
+
+        lefth_x = lefth_x[~torch.any(torch.isnan(lefth_x), dim=1), :]
+        righth_x = righth_x[~torch.any(torch.isnan(righth_x), dim=1), :]
+
+        lefth_mean = torch.mean(lefth_x, 0)
+        lefth_mean = lefth_mean.view(21, 3)
+        righth_mean = torch.mean(righth_x, 0)
+        righth_mean = righth_mean.view(21, 3)
+        pose_mean = torch.mean(pose_x, 0)
+        pose_mean = pose_mean.view(33, 3)
+
+        lefth_std = torch.std(lefth_x, 0)
+        lefth_std = lefth_std.view(21, 3)
+        righth_std = torch.std(righth_x, 0)
+        righth_std = righth_std.view(21, 3)
+        pose_std = torch.std(pose_x, 0)
+        pose_std = pose_std.view(33, 3)
+
+        lefth_feat = torch.cat([lefth_mean, lefth_std], dim=1)
+        righth_feat = torch.cat([righth_mean, righth_std], dim=1)
+        pose_feat = torch.cat([pose_mean, pose_std], dim=1)
+
+        x_feat = torch.cat([lefth_feat, pose_feat, righth_feat], dim=0)
+
+        # TODO one hot encoding
+        # TODO drop nans
+        nan_mask = torch.isnan(x_feat)
+        x_feat = torch.where(nan_mask, torch.tensor(0.0, dtype=torch.float32), x_feat)
+        edge_index = self.edge_index
+
+        # TEMPORARY [END]
+        return x_feat, edge_index
 
 
 def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
@@ -80,6 +156,11 @@ if __name__ == "__main__":
     data_csv = "train.csv"
     train_df = pd.read_csv(data_base_path / data_csv)
     labels = load_labels(data_dir=data_base_path, labels=train_df["sign"])
+
+    fg = FeatureGenerator()
+    oi = load_relevant_data_subset(data_base_path / train_df["path"][0])
+    oi = torch.from_numpy(oi)
+    blub = fg(oi)
 
     example_data = pd.read_parquet(data_base_path / train_df["path"][0])
 
