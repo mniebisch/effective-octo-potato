@@ -49,15 +49,16 @@ def create_node_indices() -> torch.Tensor:
     The numeration of the nodes is such that it matches the order or the full
     dataset (all body parts) provided at inference time (543 nodes per frame).
     """
-    left_hand_indices = torch.arange(458, 489)
+    left_hand_indices = torch.arange(468, 489)
     pose_indices = torch.arange(489, 522)
     right_hand_indices = torch.arange(522, 543)
     return torch.cat([left_hand_indices, pose_indices, right_hand_indices])
 
 
 def create_node_mask() -> torch.Tensor:
+    num_input_nodes = 543
     node_indices = create_node_indices()
-    node_mask = torch.zeros_like(node_indices, dtype=torch.bool)
+    node_mask = torch.zeros(num_input_nodes, dtype=torch.bool)
     node_mask[node_indices] = True
     return node_mask
 
