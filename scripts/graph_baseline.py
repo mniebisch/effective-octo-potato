@@ -21,6 +21,7 @@ from effective_octo_potato.graph_utils import (
     create_edge_index,
     create_node_indices,
     create_node_mask,
+    create_one_hot,
 )
 
 # TODO get edge based on media type descriptions
@@ -54,6 +55,7 @@ class FeatureGenerator(torch.nn.Module):
         self.edge_index = apply_node_mask_to_edges(
             mask=self.node_mask, edge_index=self.edge_index
         )
+        self.one_hot = create_one_hot(num_nodes=self.node_indices.shape[0])
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Feature Transformation.
@@ -94,6 +96,7 @@ class FeatureGenerator(torch.nn.Module):
         pose_feat = torch.cat([pose_mean, pose_std], dim=1)
 
         x_feat = torch.cat([lefth_feat, pose_feat, righth_feat], dim=0)
+        one_hot = self.one_hot
 
         # TODO one hot encoding
         # TODO drop nans
