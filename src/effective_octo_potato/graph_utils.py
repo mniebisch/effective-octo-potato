@@ -5,6 +5,7 @@ __all__ = [
     "apply_node_mask_to_edges",
     "create_edge_index",
     "create_left_hand_edge_index",
+    "create_node_indices",
     "create_pose_edge_index",
     "create_right_hand_edge_index",
 ]
@@ -34,6 +35,23 @@ def apply_node_mask_to_edges(
     lookup_table[mask] = torch.arange(torch.sum(mask).item())
 
     return lookup_table[edge_index]
+
+
+def create_node_indices() -> torch.Tensor:
+    """
+    The node indices in our experiments.
+    We use the following body parts:
+        - left hand
+        - right hand
+        - pose
+
+    The numeration of the nodes is such that it matches the order or the full
+    dataset (all body parts) provided at inference time (543 nodes per frame).
+    """
+    left_hand_indices = torch.arange(458, 489)
+    pose_indices = torch.arange(489, 522)
+    right_hand_indices = torch.arange(522, 543)
+    return torch.cat([left_hand_indices, pose_indices, right_hand_indices])
 
 
 def _create_hand_edge_index() -> torch.Tensor:
