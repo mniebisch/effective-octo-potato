@@ -98,14 +98,17 @@ class FeatureGenerator(torch.nn.Module):
         x_feat = torch.cat([lefth_feat, pose_feat, righth_feat], dim=0)
         one_hot = self.one_hot
 
-        # TODO one hot encoding
-        # TODO drop nans
         nan_mask = torch.isnan(x_feat)
-        x_feat = torch.where(nan_mask, torch.tensor(0.0, dtype=torch.float32), x_feat)
+        nan_mask = torch.any(nan_mask, dim=1)
+        nan_mask = torch.logical_not(nan_mask)
+
+        x_feat = x_feat[nan_mask]
+        one_hot = one_hot[nan_mask]
         edge_index = self.edge_index
+        edge_index = apply_node_mask_to_edges(mask=nan_mask, edge_index=edge_index)
 
         # TEMPORARY [END]
-        return x_feat, edge_index
+        return torch.cat([x_feat, one_hot], dim=1), edge_index
 
 
 def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
@@ -163,7 +166,7 @@ if __name__ == "__main__":
     fg = FeatureGenerator()
     oi = load_relevant_data_subset(data_base_path / train_df["path"][0])
     oi = torch.from_numpy(oi)
-    blub = fg(oi)
+    blub, muh = fg(oi)
 
     example_data = pd.read_parquet(data_base_path / train_df["path"][0])
 
