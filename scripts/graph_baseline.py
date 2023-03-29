@@ -1,5 +1,5 @@
-import collections
 import json
+import multiprocessing as mp
 import pathlib
 from typing import Dict, List, Tuple
 
@@ -9,11 +9,9 @@ import onnx
 import onnxruntime
 import pandas as pd
 import torch
-import torch.nn.functional as torch_F
 import torch_geometric.data as pyg_data
 import torch_geometric.loader as pyg_loader
 import torch_geometric.nn as pyg_nn
-import torch_geometric.utils as pyg_utils
 import tqdm
 
 from effective_octo_potato.graph_utils import (
@@ -44,6 +42,41 @@ def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
     n_frames = int(len(data) / ROWS_PER_FRAME)
     data = data.values.reshape(n_frames, ROWS_PER_FRAME, len(data_columns))
     return data.astype(np.float32)
+
+
+def _create_features(
+    file_name: pathlib.Path, feature_generator: torch.nn.Module
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    sign_sequence = load_relevant_data_subset(pq_path=file_name)
+    sign_sequence = torch.from_numpy(sign_sequence)
+    features, edge_index = feature_generator(sign_sequence)
+    return features, edge_index
+
+
+def create_features(
+    file_names: List[pathlib.Path], feature_generator: torch.nn.Module
+) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+    return [
+        _create_features(filename, feature_generator)
+        for filename in tqdm.tqdm(file_names)
+    ]
+
+
+def handle_training_data(
+    raw_dir: pathlib.Path,
+    feature_dir: pathlib.Path,
+    feature_generator: torch.nn.Module,
+    feature_file_name: str,
+) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+    feature_matrix_file_name = feature_dir / feature_file_name
+    if not feature_matrix_file_name.is_file():
+        # TODO fix use of data from outer scope
+        file_paths = [raw_dir / filename for filename in train_df["path"].tolist()]
+        feature_matrix = create_features(file_paths, feature_generator)
+        torch.save(feature_matrix, feature_matrix_file_name)
+    else:
+        feature_matrix = torch.load(feature_matrix_file_name)
+    return feature_matrix
 
 
 class FeatureGenerator(torch.nn.Module):
@@ -124,14 +157,6 @@ def load_labels(data_dir: pathlib.Path, labels: pd.Series) -> npt.NDArray[np.int
     return labels.values
 
 
-def create_pyg_graph(
-    node_features: npt.NDArray[np.float32], edge_matrix: torch.Tensor, label: int
-) -> pyg_data.Data:
-    node_features = node_features.reshape((75, 6))
-    node_features = torch.tensor(node_features, dtype=torch.float32)
-    return pyg_data.Data(x=node_features, edge_index=edge_matrix, y=label)
-
-
 class GCN(torch.nn.Module):
     def __init__(
         self, num_node_features: int, hidden_channels: int, num_classes: int
@@ -157,128 +182,27 @@ class GCN(torch.nn.Module):
 
 if __name__ == "__main__":
     data_base_path = pathlib.Path(__file__).parent.parent / "data"
+    output_base_path = pathlib.Path(__file__).parent.parent / "data"
 
     # load/process labels
     data_csv = "train.csv"
     train_df = pd.read_csv(data_base_path / data_csv)
     labels = load_labels(data_dir=data_base_path, labels=train_df["sign"])
 
+    # create/load features
+    feature_matrix_file_name = "graph_data_meanstd.zip"
     fg = FeatureGenerator()
-    oi = load_relevant_data_subset(data_base_path / train_df["path"][0])
-    oi = torch.from_numpy(oi)
-    blub, muh = fg(oi)
 
-    example_data = pd.read_parquet(data_base_path / train_df["path"][0])
-
-    num_nodes = 543
-    nodes: pd.DataFrame = example_data[["type", "landmark_index"]].iloc[
-        range(num_nodes)
-    ]
-
-    # nodes from view of kaggle data (DATASET PERSPECTIVE)
-    left_hand = list(range(468, 489))
-    right_hand = list(range(522, 543))
-    pose = list(range(489, 522))
-    node_indices = left_hand + right_hand + pose
-
-    # node selection
-    nodes = nodes.iloc[node_indices]
-    node_map: dict[str, dict[int, int]] = collections.defaultdict(dict)
-    for feature_matrix_index, (body_part, landmark_index) in enumerate(
-        zip(nodes.type, nodes.landmark_index)
-    ):
-        node_map[body_part][landmark_index] = feature_matrix_index
-
-    # edges from view of body part (BODY PART PERSPECTIVE)
-    hand_edges = [
-        (0, 1),
-        (1, 2),
-        (2, 3),
-        (3, 4),
-        (0, 5),
-        (5, 6),
-        (6, 7),
-        (7, 8),
-        (5, 9),
-        (9, 10),
-        (10, 11),
-        (11, 12),
-        (9, 13),
-        (13, 14),
-        (14, 15),
-        (15, 16),
-        (13, 17),
-        (0, 17),
-        (17, 18),
-        (18, 19),
-        (19, 20),
-    ]
-
-    pose_edges = [
-        (0, 1),
-        (1, 2),
-        (2, 3),
-        (3, 7),
-        (0, 4),
-        (4, 5),
-        (5, 6),
-        (6, 8),
-        (9, 10),
-        (11, 12),
-        (11, 13),
-        (11, 23),
-        (13, 15),
-        (15, 21),
-        (15, 19),
-        (15, 17),
-        (17, 19),
-        (12, 14),
-        (12, 24),
-        (14, 16),
-        (16, 22),
-        (16, 18),
-        (16, 20),
-        (18, 20),
-        (23, 24),
-        (23, 25),
-        (25, 27),
-        (27, 29),
-        (27, 31),
-        (29, 31),
-        (24, 26),
-        (26, 28),
-        (28, 30),
-        (28, 32),
-        (30, 32),
-    ]
-
-    body_part_edges = {
-        "left_hand": hand_edges,
-        "right_hand": hand_edges,
-        "pose": pose_edges,
-    }
-
-    graph_edges = [
-        (node_map[body_part][edge_x], node_map[body_part][edge_y])
-        for body_part, edges in body_part_edges.items()
-        for edge_x, edge_y in edges
-    ]
-
-    # shape feature matrix
-    # (76139 X 75 * 3 * 2)
-    # (num_graph X num_nodes * num_spatial_coords * num_features)
-    # num_features = 2 => mean and std
-    feature_matrix_file_name = "baseline_mean_std.npy"
-    feature_matrix = np.load(data_base_path / feature_matrix_file_name)
-
-    example_graph = feature_matrix[0]
-
-    edge_matrix = torch.tensor(graph_edges, dtype=torch.int64).T
-    edge_matrix = pyg_utils.to_undirected(edge_matrix)
+    feature_matrix = handle_training_data(
+        raw_dir=data_base_path,
+        feature_dir=output_base_path,
+        feature_generator=fg,
+        feature_file_name=feature_matrix_file_name,
+    )
 
     graphs: List[pyg_data.Data] = [
-        create_pyg_graph(node_features, edge_matrix, label)
-        for node_features, label in tqdm.tqdm(zip(feature_matrix, labels))
+        pyg_data.Data(x=node_features, edge_index=edge_index, y=label)
+        for (node_features, edge_index), label in zip(feature_matrix, labels)
     ]
 
     # hyperparams
@@ -346,8 +270,6 @@ if __name__ == "__main__":
     batch_dummy = batch_dummy.to(device)
     # # perform onnx conversion
     model.eval()
-    # model = torch.jit.script(model)
-    # model = torch.jit.trace(model)
     torch.onnx.export(
         model,
         (x_dummy, edge_index_dummy, batch_dummy),
