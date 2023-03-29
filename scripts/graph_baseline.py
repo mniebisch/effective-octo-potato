@@ -191,6 +191,29 @@ def get_data_split(
     return next(group_split)
 
 
+def eval(
+    model: torch.nn.Module,
+    dataloader: pyg_loader.DataLoader,
+    device: torch.device,
+) -> float:
+    model.eval()
+    total = 0
+    correct = 0
+    with torch.no_grad():
+        batch_iterator = tqdm.tqdm(dataloader)
+        for data in batch_iterator:
+            x = data.x.to(device)
+            edge_index = data.edge_index.to(device)
+            batch = data.batch.to(device)
+            prediction = model(x, edge_index, batch)
+            target = torch.tensor(data.y, dtype=torch.long)
+            prediction_label = torch.argmax(prediction, dim=1)
+            prediction_label = prediction_label.detach().cpu()
+            total += target.shape[0]
+            correct += (target == prediction_label).sum().item()
+    return correct / total
+
+
 if __name__ == "__main__":
     data_base_path = pathlib.Path(__file__).parent.parent / "data"
     output_base_path = pathlib.Path(__file__).parent.parent / "data"
@@ -233,7 +256,7 @@ if __name__ == "__main__":
 
     # hyperparams
     batch_size = 64
-    epochs = 1
+    epochs = 10
 
     # pyg stuff
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -266,6 +289,16 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
             batch_iterator.set_postfix({"loss": loss.item()})
+
+    # eval
+    valid_dataloader = pyg_loader.DataLoader(
+        valid_graphs, batch_size=batch_size, shuffle=True
+    )
+
+    train_acc = eval(model, train_dataloader, device)
+    valid_acc = eval(model, valid_dataloader, device)
+    print("train acc", train_acc)
+    print("valid acc", valid_acc)
 
     # onnx check
     # # shapes
