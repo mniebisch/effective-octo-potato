@@ -1,7 +1,6 @@
 import json
-import multiprocessing as mp
 import pathlib
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -13,6 +12,7 @@ import torch_geometric.data as pyg_data
 import torch_geometric.loader as pyg_loader
 import torch_geometric.nn as pyg_nn
 import tqdm
+from sklearn import model_selection
 
 from effective_octo_potato.graph_utils import (
     apply_node_mask_to_edges,
@@ -180,9 +180,22 @@ class GCN(torch.nn.Module):
         return x
 
 
+def get_data_split(
+    group_labels: pd.Series, train_size: float = 0.8, is_submission: bool = True
+) -> Tuple[npt.NDArray[np.integer], npt.NDArray[np.integer]]:
+    if is_submission:
+        raise NotImplementedError
+
+    splitter = model_selection.GroupShuffleSplit(n_splits=1, train_size=train_size)
+    group_split = splitter.split(None, None, group_labels)
+    return next(group_split)
+
+
 if __name__ == "__main__":
     data_base_path = pathlib.Path(__file__).parent.parent / "data"
     output_base_path = pathlib.Path(__file__).parent.parent / "data"
+
+    is_submission = False
 
     # load/process labels
     data_csv = "train.csv"
@@ -205,6 +218,19 @@ if __name__ == "__main__":
         for (node_features, edge_index), label in zip(feature_matrix, labels)
     ]
 
+    # split data
+    train_indices, valid_indices = get_data_split(
+        group_labels=train_df["participant_id"], is_submission=is_submission
+    )
+    train_indices = train_indices.tolist()
+    valid_indices = valid_indices.tolist()
+
+    def _indexing_helper(data: List[Any], indices: List[int]) -> list[Any]:
+        return [data[ind] for ind in indices]
+
+    train_graphs = _indexing_helper(graphs, train_indices)
+    valid_graphs = _indexing_helper(graphs, valid_indices)
+
     # hyperparams
     batch_size = 64
     epochs = 1
@@ -212,7 +238,7 @@ if __name__ == "__main__":
     # pyg stuff
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     train_dataloader = pyg_loader.DataLoader(
-        graphs, batch_size=batch_size, shuffle=True
+        train_graphs, batch_size=batch_size, shuffle=True
     )
     model = GCN(
         num_node_features=graphs[0].num_node_features,
