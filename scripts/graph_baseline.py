@@ -141,7 +141,8 @@ class FeatureGenerator(torch.nn.Module):
         edge_index = apply_node_mask_to_edges(mask=nan_mask, edge_index=edge_index)
 
         # TEMPORARY [END]
-        return torch.cat([x_feat, one_hot], dim=1), edge_index
+        # return torch.cat([x_feat, one_hot], dim=1), edge_index
+        return x_feat, edge_index
 
 
 def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
@@ -157,26 +158,59 @@ def load_labels(data_dir: pathlib.Path, labels: pd.Series) -> npt.NDArray[np.int
     return labels.values
 
 
-class GCN(torch.nn.Module):
+class MeinBlock(torch.nn.Module):
     def __init__(
-        self, num_node_features: int, hidden_channels: int, num_classes: int
+        self, input_channels: int, hidden_channels: int, aggr: str = "sum"
     ) -> None:
         super().__init__()
-        self.conv1 = pyg_nn.GCNConv(num_node_features, hidden_channels)
-        self.conv2 = pyg_nn.GCNConv(hidden_channels, hidden_channels)
-        self.conv3 = pyg_nn.GCNConv(hidden_channels, hidden_channels)
-        self.linear = torch.nn.Linear(hidden_channels, num_classes)
+        self.act1 = torch.nn.PReLU()
+        self.bn1 = torch.nn.BatchNorm1d(input_channels)
+        self.conv1 = pyg_nn.GCNConv(input_channels, hidden_channels, aggr=aggr)
+        self.act2 = torch.nn.PReLU()
+        self.conv2 = pyg_nn.GCNConv(hidden_channels, input_channels, aggr=aggr)
+
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+        x = self.act1(x)
+        x = self.bn1(x)
+        x = self.conv1(x, edge_index)
+        x = self.act2(x)
+        x = self.conv2(x, edge_index)
+        return x
+
+
+class GCN(torch.nn.Module):
+    def __init__(
+        self,
+        num_node_features: int,
+        hidden_channels: int,
+        num_classes: int,
+        num_blocks: int,
+        drop_p: float,
+    ) -> None:
+        super().__init__()
+
+        self.pre_fc1 = torch.nn.Linear(num_node_features, hidden_channels)
+        self.blocks = torch.nn.ModuleList(
+            [MeinBlock(hidden_channels, 2 * hidden_channels) for _ in range(num_blocks)]
+        )
+        self.post_bn = torch.nn.BatchNorm1d(hidden_channels)
+        self.post_fc1 = torch.nn.Linear(hidden_channels, hidden_channels * 4)
+        self.post_act1 = torch.nn.PReLU()
+        self.dropout = torch.nn.Dropout(p=drop_p)
+        self.post_fc2 = torch.nn.Linear(hidden_channels * 4, num_classes)
 
     def forward(
         self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor
     ) -> torch.Tensor:
-        x = self.conv1(x, edge_index)
-        x = torch.nn.functional.relu(x)
-        x = self.conv2(x, edge_index)
-        x = torch.nn.functional.relu(x)
-        x = self.conv3(x, edge_index)
+        x = self.pre_fc1(x)
+        for i in range(len(self.blocks)):
+            x = self.blocks[i](x, edge_index)
         x = pyg_nn.global_mean_pool(x, batch)
-        x = self.linear(x)
+        x = self.post_bn(x)
+        x = self.post_fc1(x)
+        x = self.post_act1(x)
+        x = self.dropout(x)
+        x = self.post_fc2(x)
         return x
 
 
@@ -255,8 +289,8 @@ if __name__ == "__main__":
     valid_graphs = _indexing_helper(graphs, valid_indices)
 
     # hyperparams
-    batch_size = 64
-    epochs = 10
+    batch_size = 128
+    epochs = 175
 
     # pyg stuff
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -267,16 +301,25 @@ if __name__ == "__main__":
         num_node_features=graphs[0].num_node_features,
         hidden_channels=64,
         num_classes=250,
+        num_blocks=1,
+        drop_p=0.0,
     )
     model.to(device)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=5 * 10e-2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=5 * 10e-4, weight_decay=0.05)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer,
+        T_0=25,
+        T_mult=2,
+        verbose=True,
+    )
 
     model.train()
     for epoch_idx in range(epochs):
         batch_iterator = tqdm.tqdm(
             train_dataloader, desc=f"Epoch: {epoch_idx+1:02d}/{epochs}"
         )
+        rolling_loss = None
         for data in batch_iterator:
             x = data.x.to(device)
             edge_index = data.edge_index.to(device)
@@ -288,7 +331,12 @@ if __name__ == "__main__":
             loss = criterion(prediction, target)
             loss.backward()
             optimizer.step()
-            batch_iterator.set_postfix({"loss": loss.item()})
+            if rolling_loss is None:
+                rolling_loss = loss.item()
+            else:
+                rolling_loss = 0.9 * rolling_loss + 0.1 * loss.item()
+            batch_iterator.set_postfix({"loss": rolling_loss})
+        scheduler.step()
 
     # eval
     valid_dataloader = pyg_loader.DataLoader(
