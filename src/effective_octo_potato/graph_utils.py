@@ -10,6 +10,7 @@ __all__ = [
     "create_one_hot",
     "create_pose_edge_index",
     "create_right_hand_edge_index",
+    "get_pose_subgraph_nodes",
 ]
 
 
@@ -176,3 +177,11 @@ def create_edge_index() -> torch.Tensor:
         create_pose_edge_index(),
     ]
     return torch.cat(body_part_edge_index, dim=1)
+
+
+def get_pose_subgraph_nodes() -> torch.Tensor:
+    # relative indices (only considering indices of pose)
+    relative_pose_indices = torch.arange(11, 23)
+    # absolute indices (considering nodes from all body parts)
+    absolute_pose_indices = relative_pose_indices + 489
+    return absolute_pose_indices
