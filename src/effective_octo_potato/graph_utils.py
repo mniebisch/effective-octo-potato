@@ -213,6 +213,10 @@ def compute_reference_nodes(node_coords: torch.Tensor) -> torch.Tensor:
         [19, 21, 15, 17], dtype=torch.long
     )  # left hand
 
+    plain_reference_ind = plain_reference_ind + 489
+    right_hand_reference_ind = right_hand_reference_ind + 489
+    left_hand_reference_ind = left_hand_reference_ind + 489
+
     agg_reference_right_hand_nodes = torch.mean(
         node_coords[right_hand_reference_ind], dim=0, keepdim=True
     )
