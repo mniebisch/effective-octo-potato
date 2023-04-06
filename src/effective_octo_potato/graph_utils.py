@@ -51,9 +51,9 @@ def create_node_indices() -> torch.Tensor:
     The numeration of the nodes is such that it matches the order or the full
     dataset (all body parts) provided at inference time (543 nodes per frame).
     """
-    left_hand_indices = torch.arange(468, 489)
-    pose_indices = torch.arange(489, 522)
-    right_hand_indices = torch.arange(522, 543)
+    left_hand_indices = get_left_hand_nodes()
+    pose_indices = get_pose_nodes()
+    right_hand_indices = get_right_hand_nodes()
     return torch.cat([left_hand_indices, pose_indices, right_hand_indices])
 
 
@@ -185,6 +185,18 @@ def get_pose_subgraph_nodes() -> torch.Tensor:
     # absolute indices (considering nodes from all body parts)
     absolute_pose_indices = relative_pose_indices + 489
     return absolute_pose_indices
+
+
+def get_left_hand_nodes() -> torch.Tensor:
+    return torch.arange(468, 489)
+
+
+def get_right_hand_nodes() -> torch.Tensor:
+    return torch.arange(522, 543)
+
+
+def get_pose_nodes() -> torch.Tensor:
+    return torch.arange(489, 522)
 
 
 def compute_reference_nodes(node_coords: torch.Tensor) -> torch.Tensor:
