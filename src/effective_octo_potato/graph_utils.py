@@ -185,3 +185,68 @@ def get_pose_subgraph_nodes() -> torch.Tensor:
     # absolute indices (considering nodes from all body parts)
     absolute_pose_indices = relative_pose_indices + 489
     return absolute_pose_indices
+
+
+def compute_reference_nodes(node_coords: torch.Tensor) -> torch.Tensor:
+    # node_coords = torch.zeros((543, 3))
+    plain_reference_ind = torch.tensor(
+        [
+            8,  # right ear
+            7,  # left ear
+            5,  # right eye
+            2,  # left eye
+            0,  # nose
+            10,  # mouth right
+            9,  # mouth left
+            12,  # right shoulder
+            11,  # left shoulder
+            24,  # right hip
+            23,  # left hip
+        ],
+        dtype=torch.long,
+    )
+
+    right_hand_reference_ind = torch.tensor(
+        [20, 22, 18, 16], dtype=torch.long
+    )  # right hand
+    left_hand_reference_ind = torch.tensor(
+        [19, 21, 15, 17], dtype=torch.long
+    )  # left hand
+
+    agg_reference_right_hand_nodes = torch.mean(
+        node_coords[right_hand_reference_ind], dim=0, keepdim=True
+    )
+    agg_reference_left_hand_nodes = torch.mean(
+        node_coords[left_hand_reference_ind], dim=0, keepdim=True
+    )
+    plain_reference_nodes = node_coords[plain_reference_ind]
+
+    return torch.cat(
+        [
+            plain_reference_nodes,
+            agg_reference_right_hand_nodes,
+            agg_reference_left_hand_nodes,
+        ]
+    )
+
+
+def calc_node_dist_to_reference_feature(
+    nodes: torch.Tensor, reference: torch.Tensor
+) -> torch.Tensor:
+    """
+    For each node in nodes compute distance to each node in reference.
+
+    Args:
+        nodes:
+            Spatial coordinates of each nodes.
+            Input shape [num_nodes, num_spatial_dims].
+            These are the nodes for which we would like to compute the reference
+            distance features.
+        reference:
+            Spatial coordinated of reference nodes.
+            Input shape [num_reference_nodes, num_spatial_dims]
+    Returns:
+        Distance matrix with shape [num_nodes, num_reference_nodes].
+        The output can be concatenate to nodes input via torch.cat in dim 1.
+    """
+    return torch.cdist(nodes, reference, p=2)
