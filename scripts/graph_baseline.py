@@ -4,8 +4,9 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
-import onnx
-import onnxruntime
+
+# import onnx
+# import onnxruntime
 import pandas as pd
 import torch
 import torch_geometric.data as pyg_data
@@ -138,6 +139,8 @@ class FeatureGenerator(torch.nn.Module):
         face_feat = torch.cat([face_mean, face_std], dim=1)
 
         x_feat = torch.cat([face_feat, lefth_feat, pose_feat, righth_feat], dim=0)
+        # compute_reference_nodes needs to be applied to all 543 nodes!
+        reference_coords = compute_reference_nodes(x_feat[:, [0, 2, 4]])
         x_feat = x_feat[self.node_indices]
 
         nan_mask = torch.isnan(x_feat)
@@ -145,7 +148,6 @@ class FeatureGenerator(torch.nn.Module):
         nan_mask = torch.logical_not(nan_mask)
 
         x_feat = x_feat[nan_mask]
-        reference_coords = compute_reference_nodes()
         # ATTENTION indexing due to mean and std stuff
         # Further keep in mind that we would like to train for 2D case? maybe
         reference_feat = calc_node_dist_to_reference_feature(
@@ -275,7 +277,7 @@ if __name__ == "__main__":
     labels = load_labels(data_dir=data_base_path, labels=train_df["sign"])
 
     # create/load features
-    feature_matrix_file_name = "graph_data_meanstd.zip"
+    feature_matrix_file_name = "graph_data_meanstd_subpose_reference_nodes.zip"
     fg = FeatureGenerator()
 
     feature_matrix = handle_training_data(
@@ -305,7 +307,7 @@ if __name__ == "__main__":
 
     # hyperparams
     batch_size = 128
-    epochs = 175
+    epochs = 1  # 175
 
     # pyg stuff
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -363,74 +365,74 @@ if __name__ == "__main__":
     print("train acc", train_acc)
     print("valid acc", valid_acc)
 
-    # onnx check
-    # # shapes
-    # x shape [num_nodes * batch_size, num_node_features]
-    # edge_index shape [2, batch_size * num_edges]
-    # batch shape [num_nodes * batch_size]
-    # model = torch_geometric.compile(model)
-    num_nodes_in = graphs[0].num_nodes
-    num_node_features_in = graphs[0].num_node_features
-    num_edges = graphs[0].num_edges
+    # # onnx check
+    # # # shapes
+    # # x shape [num_nodes * batch_size, num_node_features]
+    # # edge_index shape [2, batch_size * num_edges]
+    # # batch shape [num_nodes * batch_size]
+    # # model = torch_geometric.compile(model)
+    # num_nodes_in = graphs[0].num_nodes
+    # num_node_features_in = graphs[0].num_node_features
+    # num_edges = graphs[0].num_edges
 
-    # # create input dummies
-    x_dummy = torch.randn(
-        num_nodes_in * batch_size,
-        num_node_features_in,
-        dtype=torch.float32,
-        requires_grad=True,
-    )
-    # 9856
-    edge_index_dummy = torch.tensor(
-        [(0, 1), (1, 0)] * (77 * batch_size), dtype=torch.int64
-    ).T
-    batch_dummy = torch.arange(batch_size, dtype=torch.int64)
-    batch_dummy: torch.Tensor = batch_dummy.repeat_interleave(num_nodes_in)
+    # # # create input dummies
+    # x_dummy = torch.randn(
+    #     num_nodes_in * batch_size,
+    #     num_node_features_in,
+    #     dtype=torch.float32,
+    #     requires_grad=True,
+    # )
+    # # 9856
+    # edge_index_dummy = torch.tensor(
+    #     [(0, 1), (1, 0)] * (77 * batch_size), dtype=torch.int64
+    # ).T
+    # batch_dummy = torch.arange(batch_size, dtype=torch.int64)
+    # batch_dummy: torch.Tensor = batch_dummy.repeat_interleave(num_nodes_in)
 
-    x_dummy = x_dummy.to(device)
-    edge_index_dummy = edge_index_dummy.to(device)
-    batch_dummy = batch_dummy.to(device)
-    # # perform onnx conversion
-    model.eval()
-    torch.onnx.export(
-        model,
-        (x_dummy, edge_index_dummy, batch_dummy),
-        "graph_model.onnx",
-        export_params=True,
-        opset_version=16,
-        do_constant_folding=True,
-        input_names=["features", "edges", "batch"],
-        output_names=["output"],
-        dynamic_axes={
-            "features": [0],
-            "edges": [1],
-            "batch": [0],
-            "output": [0],
-        },
-    )
+    # x_dummy = x_dummy.to(device)
+    # edge_index_dummy = edge_index_dummy.to(device)
+    # batch_dummy = batch_dummy.to(device)
+    # # # perform onnx conversion
+    # model.eval()
+    # torch.onnx.export(
+    #     model,
+    #     (x_dummy, edge_index_dummy, batch_dummy),
+    #     "graph_model.onnx",
+    #     export_params=True,
+    #     opset_version=16,
+    #     do_constant_folding=True,
+    #     input_names=["features", "edges", "batch"],
+    #     output_names=["output"],
+    #     dynamic_axes={
+    #         "features": [0],
+    #         "edges": [1],
+    #         "batch": [0],
+    #         "output": [0],
+    #     },
+    # )
 
-    onnx_model = onnx.load("graph_model.onnx")
-    # raises Exception if something went wrong
-    check = onnx.checker.check_model(onnx_model)
+    # onnx_model = onnx.load("graph_model.onnx")
+    # # raises Exception if something went wrong
+    # check = onnx.checker.check_model(onnx_model)
 
-    # compare values
-    output_dummy = model(x_dummy, edge_index_dummy, batch_dummy)
+    # # compare values
+    # output_dummy = model(x_dummy, edge_index_dummy, batch_dummy)
 
-    def to_numpy(tensor):
-        return (
-            tensor.detach().cpu().numpy()
-            if tensor.requires_grad
-            else tensor.cpu().numpy()
-        )
+    # def to_numpy(tensor):
+    #     return (
+    #         tensor.detach().cpu().numpy()
+    #         if tensor.requires_grad
+    #         else tensor.cpu().numpy()
+    #     )
 
-    ort_session = onnxruntime.InferenceSession("graph_model.onnx")
-    ort_inputs = {
-        ort_session.get_inputs()[0].name: to_numpy(x_dummy),
-        ort_session.get_inputs()[1].name: to_numpy(edge_index_dummy),
-        ort_session.get_inputs()[2].name: to_numpy(batch_dummy),
-    }
-    ort_outs = ort_session.run(None, ort_inputs)
+    # ort_session = onnxruntime.InferenceSession("graph_model.onnx")
+    # ort_inputs = {
+    #     ort_session.get_inputs()[0].name: to_numpy(x_dummy),
+    #     ort_session.get_inputs()[1].name: to_numpy(edge_index_dummy),
+    #     ort_session.get_inputs()[2].name: to_numpy(batch_dummy),
+    # }
+    # ort_outs = ort_session.run(None, ort_inputs)
 
-    np.testing.assert_allclose(
-        to_numpy(output_dummy), ort_outs[0], rtol=1e-03, atol=1e-05
-    )
+    # np.testing.assert_allclose(
+    #     to_numpy(output_dummy), ort_outs[0], rtol=1e-03, atol=1e-05
+    # )
