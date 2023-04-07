@@ -16,6 +16,8 @@ from sklearn import model_selection
 
 from effective_octo_potato.graph_utils import (
     apply_node_mask_to_edges,
+    calc_node_dist_to_reference_feature,
+    compute_reference_nodes,
     create_edge_index,
     create_node_indices,
     create_node_mask,
@@ -85,6 +87,7 @@ class FeatureGenerator(torch.nn.Module):
         self.node_indices: torch.Tensor = create_node_indices()
         self.node_mask: torch.Tensor = create_node_mask(node_indices=self.node_indices)
         self.edge_index: torch.Tensor = create_edge_index()
+        # TODO add indices of desired nodes (absolute as we have face atm)
         self.edge_index = apply_node_mask_to_edges(
             mask=self.node_mask, edge_index=self.edge_index
         )
@@ -103,6 +106,7 @@ class FeatureGenerator(torch.nn.Module):
             used.
         """
         # TEMPORARY TO GET EVERYTHING RUNNING [START]
+        face_x = x[:, :468].contiguous().view(-1, 468 * 3)
         lefth_x = x[:, 468:489, :].contiguous().view(-1, 21 * 3)
         pose_x = x[:, 489:522, :].contiguous().view(-1, 33 * 3)
         righth_x = x[:, 522:, :].contiguous().view(-1, 21 * 3)
@@ -116,6 +120,8 @@ class FeatureGenerator(torch.nn.Module):
         righth_mean = righth_mean.view(21, 3)
         pose_mean = torch.mean(pose_x, 0)
         pose_mean = pose_mean.view(33, 3)
+        face_mean = torch.mean(face_x, 0)
+        face_mean = face_mean.view(468, 3)
 
         lefth_std = torch.std(lefth_x, 0)
         lefth_std = lefth_std.view(21, 3)
@@ -123,26 +129,35 @@ class FeatureGenerator(torch.nn.Module):
         righth_std = righth_std.view(21, 3)
         pose_std = torch.std(pose_x, 0)
         pose_std = pose_std.view(33, 3)
+        face_std = torch.std(face_x, 0)
+        face_std = face_std.view(468, 3)
 
         lefth_feat = torch.cat([lefth_mean, lefth_std], dim=1)
         righth_feat = torch.cat([righth_mean, righth_std], dim=1)
         pose_feat = torch.cat([pose_mean, pose_std], dim=1)
+        face_feat = torch.cat([face_mean, face_std], dim=1)
 
-        x_feat = torch.cat([lefth_feat, pose_feat, righth_feat], dim=0)
-        one_hot = self.one_hot
+        x_feat = torch.cat([face_feat, lefth_feat, pose_feat, righth_feat], dim=0)
+        x_feat = x_feat[self.node_indices]
 
         nan_mask = torch.isnan(x_feat)
         nan_mask = torch.any(nan_mask, dim=1)
         nan_mask = torch.logical_not(nan_mask)
 
         x_feat = x_feat[nan_mask]
-        one_hot = one_hot[nan_mask]
+        reference_coords = compute_reference_nodes()
+        # ATTENTION indexing due to mean and std stuff
+        # Further keep in mind that we would like to train for 2D case? maybe
+        reference_feat = calc_node_dist_to_reference_feature(
+            nodes=x_feat[:, [0, 2, 4]], reference=reference_coords
+        )
+
+        one_hot = self.one_hot[nan_mask]
         edge_index = self.edge_index
         edge_index = apply_node_mask_to_edges(mask=nan_mask, edge_index=edge_index)
 
         # TEMPORARY [END]
-        # return torch.cat([x_feat, one_hot], dim=1), edge_index
-        return x_feat, edge_index
+        return torch.cat([x_feat, one_hot, reference_feat], dim=1), edge_index
 
 
 def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
