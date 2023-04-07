@@ -25,6 +25,10 @@ from effective_octo_potato.graph_utils import (
     create_one_hot,
 )
 
+# TODO 1 up-/or downsampling of frames to fixed number of frames via interpolation
+# TODO 2 could a kinda transformer handle variable size of frames?
+# TODO 3 create huge graph reflecting temporal patterns (not compatible with TODO 2)
+
 
 def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
     ROWS_PER_FRAME = 543  # number of landmarks per frame
