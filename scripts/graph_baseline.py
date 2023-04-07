@@ -25,18 +25,6 @@ from effective_octo_potato.graph_utils import (
     create_one_hot,
 )
 
-# TODO get edge based on media type descriptions
-# TODO create multi-graph dataset similar to TUDataset (Mutag) (pyg)
-# https://colab.research.google.com/drive/1I8a0DfQ3fI7Njc62__mVXUlcAleUclnb?usp=sharing#scrollTo=j11WiUr-PRH_
-
-
-# https://stackoverflow.com/questions/53033556/how-should-the-learning-rate-change-as-the-batch-size-change
-
-# https://pytorch.org/tutorials/advanced/super_resolution_with_onnxruntime.html
-
-# TODO Check if pyg can be transformed to tflight
-# for more check doc
-
 
 def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
     ROWS_PER_FRAME = 543  # number of landmarks per frame
