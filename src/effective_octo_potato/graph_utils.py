@@ -11,6 +11,7 @@ __all__ = [
     "create_pose_edge_index",
     "create_right_hand_edge_index",
     "create_temporal_edge_indices",
+    "fix_num_frames",
     "get_pose_subgraph_nodes",
     "map_edge_indices_to_temporal_graph",
 ]
@@ -316,3 +317,19 @@ def create_temporal_edge_indices(num_nodes: int, num_frames: int) -> torch.Tenso
     to_node = torch.flatten(to_node)
 
     return torch.stack([from_node, to_node])
+
+
+def fix_num_frames(x: torch.Tensor, num_sampling_time_steps: int) -> torch.Tensor:
+    """
+
+    Args:
+        x: Nodes in time (num_frames) and space (x, y, z). Shape (num_frames, 543, 3).
+        num_sampling_time_steps:
+            The number of time steps to which the number of frames is fit.
+
+    Return:
+        Down/Up sampled temporal point cloud with shape
+        [num_sampling_time_steps, 543, 3].
+
+    """
+    return torch.nn.functional.interpolate(x, num_sampling_time_steps, mode="linear")
