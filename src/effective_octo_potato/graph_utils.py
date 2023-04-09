@@ -11,6 +11,7 @@ __all__ = [
     "create_pose_edge_index",
     "create_right_hand_edge_index",
     "get_pose_subgraph_nodes",
+    "map_edge_indices_to_temporal_graph",
 ]
 
 
@@ -266,3 +267,30 @@ def calc_node_dist_to_reference_feature(
         The output can be concatenate to nodes input via torch.cat in dim 1.
     """
     return torch.cdist(nodes, reference, p=2)
+
+
+def map_edge_indices_to_temporal_graph(
+    edge_index: torch.Tensor, num_nodes: int, num_frames: int
+) -> torch.Tensor:
+    """
+    Create edge connections for each graph in temporal graph.
+    Aim of this function is to create pyg compatible edge indices such that the graph
+    of a given time step is connected.
+    No temporal connection is created with this function.
+
+    Args:
+        edge_index: COO adjacency representation with shape [2, num_edges].
+        num_nodes: Number of nodes per frame.
+        num_frames: Number of timesteps in temporal graph.
+    Returns:
+        Adapted COO adjecency representation for each frame such that after
+        following processing steps a all edge_indices can be joined into single
+        representation.
+        Shape [num_frames, 2, num_edges].
+    """
+    node_shift = torch.arange(num_frames) * num_nodes
+    node_shift = node_shift.reshape((num_frames, 1, 1))
+
+    frame_edge_indices = edge_index.unsqueeze(0).repeat(num_frames, 1, 1)
+
+    return frame_edge_indices + node_shift

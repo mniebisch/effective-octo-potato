@@ -33,3 +33,62 @@ class TestApplyNodeMaskToEdges:
         output = graph_utils.apply_node_mask_to_edges(input_mask, input_edge_index)
 
         torch.testing.assert_close(expected, output)
+
+
+class TestMapEdgeIndicesToTemporalGraph:
+    def test_two_nodes(self) -> None:
+        edge_index = torch.tensor([[0], [1]], dtype=torch.float32)
+        num_nodes = 2
+        num_frames = 3
+
+        expected = torch.tensor(
+            [
+                [[0], [1]],
+                [[2], [3]],
+                [[4], [5]],
+            ],
+            dtype=torch.float32,
+        )
+
+        output = graph_utils.map_edge_indices_to_temporal_graph(
+            edge_index=edge_index, num_nodes=num_nodes, num_frames=num_frames
+        )
+        torch.testing.assert_close(expected, output)
+
+    def test_three_nodes_but_one_edge(self) -> None:
+        edge_index = torch.tensor([[0], [2]], dtype=torch.float32)
+        num_nodes = 3
+        num_frames = 3
+
+        expected = torch.tensor(
+            [
+                [[0], [2]],
+                [[3], [5]],
+                [[6], [8]],
+            ],
+            dtype=torch.float32,
+        )
+
+        output = graph_utils.map_edge_indices_to_temporal_graph(
+            edge_index=edge_index, num_nodes=num_nodes, num_frames=num_frames
+        )
+        torch.testing.assert_close(expected, output)
+
+    def test_four_nodes_but_one_edge(self) -> None:
+        edge_index = torch.tensor([[0], [2]], dtype=torch.float32)
+        num_nodes = 4
+        num_frames = 3
+
+        expected = torch.tensor(
+            [
+                [[0], [2]],
+                [[4], [6]],
+                [[8], [10]],
+            ],
+            dtype=torch.float32,
+        )
+
+        output = graph_utils.map_edge_indices_to_temporal_graph(
+            edge_index=edge_index, num_nodes=num_nodes, num_frames=num_frames
+        )
+        torch.testing.assert_close(expected, output)
