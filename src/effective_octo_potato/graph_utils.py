@@ -10,6 +10,7 @@ __all__ = [
     "create_one_hot",
     "create_pose_edge_index",
     "create_right_hand_edge_index",
+    "create_temporal_edge_indices",
     "get_pose_subgraph_nodes",
     "map_edge_indices_to_temporal_graph",
 ]
@@ -294,3 +295,22 @@ def map_edge_indices_to_temporal_graph(
     frame_edge_indices = edge_index.unsqueeze(0).repeat(num_frames, 1, 1)
 
     return frame_edge_indices + node_shift
+
+
+def create_temporal_edge_indices(num_nodes: int, num_frames: int) -> torch.Tensor:
+    """
+    Returns:
+        Temporal edge indices with shape [2, num_edges].
+        num_edges == num_nodes * num_frames.
+    """
+    nodes = torch.arange(num_nodes, dtype=torch.float32).reshape(1, -1)
+    start_frame = torch.arange(num_frames).reshape(-1, 1) * num_nodes
+    dest_frame = torch.arange(1, num_frames + 1).reshape(-1, 1) * num_nodes
+
+    from_node = start_frame + nodes
+    to_node = dest_frame + nodes
+
+    from_node = torch.flatten(from_node)
+    to_node = torch.flatten(to_node)
+
+    return torch.stack([from_node, to_node])
