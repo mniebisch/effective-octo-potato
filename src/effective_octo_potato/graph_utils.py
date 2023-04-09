@@ -299,6 +299,8 @@ def map_edge_indices_to_temporal_graph(
 
 def create_temporal_edge_indices(num_nodes: int, num_frames: int) -> torch.Tensor:
     """
+    Create temporal edges to create temporal graph.
+
     Returns:
         Temporal edge indices with shape [2, num_edges].
         num_edges == num_nodes * num_frames.
