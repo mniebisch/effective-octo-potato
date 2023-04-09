@@ -25,9 +25,10 @@ from effective_octo_potato.graph_utils import (
     create_one_hot,
 )
 
-# TODO 1 up-/or downsampling of frames to fixed number of frames via interpolation
+# TODO 1 up-/or downsampling of frames to fixed number of frames via interpolation [IMPLEMENTED]
 # TODO 2 could a kinda transformer handle variable size of frames?
-# TODO 3 create huge graph reflecting temporal patterns (not compatible with TODO 2)
+# TODO 3 create huge graph reflecting temporal patterns (not compatible with TODO 2) [IMPLEMENTED]
+# TODO 4 use/create edge labels for temporal pattern graph in TODO 3
 
 
 def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
