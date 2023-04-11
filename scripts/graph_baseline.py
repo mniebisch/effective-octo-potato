@@ -31,6 +31,7 @@ from effective_octo_potato.graph_utils import (
 # TODO 4 use/create edge labels for temporal pattern graph in TODO 3
 # TODO 5 join latest step in FeatureGenerator
 # TODO 6 consider adding timestep indicator similar to pyg's batch variable (returned from pyg.DataLoader)
+# TODO 7 consider adding node indicator similar to pyg's batch variable (returned from pyg.DataLoader)
 
 
 def load_relevant_data_subset(pq_path: pathlib.Path) -> npt.NDArray[np.float32]:
