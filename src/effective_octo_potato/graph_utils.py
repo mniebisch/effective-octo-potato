@@ -306,9 +306,9 @@ def create_temporal_edge_indices(num_nodes: int, num_frames: int) -> torch.Tenso
         Temporal edge indices with shape [2, num_edges].
         num_edges == num_nodes * num_frames.
     """
-    nodes = torch.arange(num_nodes, dtype=torch.float32).reshape(1, -1)
-    start_frame = torch.arange(num_frames).reshape(-1, 1) * num_nodes
-    dest_frame = torch.arange(1, num_frames + 1).reshape(-1, 1) * num_nodes
+    nodes = torch.arange(num_nodes, dtype=torch.int64).reshape(1, -1)
+    start_frame = torch.arange(num_frames - 1).reshape(-1, 1) * num_nodes
+    dest_frame = torch.arange(1, num_frames).reshape(-1, 1) * num_nodes
 
     from_node = start_frame + nodes
     to_node = dest_frame + nodes
@@ -332,4 +332,6 @@ def fix_num_frames(x: torch.Tensor, num_sampling_time_steps: int) -> torch.Tenso
         [num_sampling_time_steps, 543, 3].
 
     """
-    return torch.nn.functional.interpolate(x, num_sampling_time_steps, mode="linear")
+    x = torch.permute(x, (2, 1, 0))
+    x = torch.nn.functional.interpolate(x, num_sampling_time_steps, mode="linear")
+    return torch.permute(x, (2, 1, 0))

@@ -117,10 +117,10 @@ class TestCreateTemporalEdgeIndices:
 
         expected = torch.tensor(
             [
-                [0, 1, 2],
-                [1, 2, 3],
+                [0, 1],
+                [1, 2],
             ],
-            dtype=torch.float32,
+            dtype=torch.int64,
         )
         output = graph_utils.create_temporal_edge_indices(
             num_nodes=num_nodes, num_frames=num_frames
