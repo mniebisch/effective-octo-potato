@@ -28,6 +28,8 @@ from effective_octo_potato.temporal_feature_generator import (
 # TODO 5 join latest step in FeatureGenerator [IMPLEMENTED]
 # TODO 6 consider adding timestep indicator similar to pyg's batch variable (returned from pyg.DataLoader) [IMPLEMENTED]
 # TODO 7 consider adding node indicator similar to pyg's batch variable (returned from pyg.DataLoader) [IMPLEMENTED]
+# TODO 8 make reference nodes aditional output. remove distance from node features.
+# compute later in augmentation. add time_step_indices information for reference nodes.
 
 
 def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
