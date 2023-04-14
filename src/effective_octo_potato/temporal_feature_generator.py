@@ -182,14 +182,7 @@ def handle_training_data(
 
 
 def create_pyg_dataset(
-    feature_matrix: List[
-        Tuple[
-            torch.Tensor,
-            torch.Tensor,
-            torch.Tensor,
-            torch.Tensor,
-        ]
-    ],
+    feature_matrix: List[GraphDescription],
     labels: npt.NDArray[np.integer],
 ) -> pyg_data.InMemoryDataset:
     return GraphDataset(data=feature_matrix, labels=labels)
