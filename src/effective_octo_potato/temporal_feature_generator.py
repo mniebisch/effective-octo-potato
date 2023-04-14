@@ -215,10 +215,15 @@ class GraphDataset(pyg_data.InMemoryDataset):
             idx
         ]
         label = self.labels[idx]
-        return pyg_data.Data(
+        data = pyg_data.Data(
             x=node_features,
             edge_index=edge_index,
             node_indices=node_indices,
             time_steps=time_steps,
             y=torch.tensor(label),
         )
+
+        if self.transform:
+            data = self.transform(data)
+
+        return data
