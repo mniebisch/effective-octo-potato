@@ -85,6 +85,7 @@ class TemporalFeatureGenerator(torch.nn.Module):
             node_feat_time = x[time_ind]
 
             # # reference features
+            # compute_reference_nodes needs to be applied to all 543 nodes!
             reference_coords = compute_reference_nodes(node_feat_time)
             node_feat_time = node_feat_time[self.node_indices]
             reference_feat = calc_node_dist_to_reference_feature(
