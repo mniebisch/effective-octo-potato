@@ -159,10 +159,6 @@ if __name__ == "__main__":
         feature_file_name=feature_matrix_file_name,
     )
 
-    graphs: List[pyg_data.Data] = create_pyg_dataset(
-        feature_matrix=feature_matrix, labels=labels
-    )
-
     # split data
     train_indices, valid_indices = get_data_split(
         group_labels=train_df["participant_id"], is_submission=is_submission
@@ -173,8 +169,13 @@ if __name__ == "__main__":
     def _indexing_helper(data: List[Any], indices: List[int]) -> list[Any]:
         return [data[ind] for ind in indices]
 
-    train_graphs = _indexing_helper(graphs, train_indices)
-    valid_graphs = _indexing_helper(graphs, valid_indices)
+    train_data = _indexing_helper(feature_matrix, train_indices)
+    valid_data = _indexing_helper(feature_matrix, valid_indices)
+    train_labels = labels[train_indices]
+    valid_labels = labels[valid_indices]
+
+    train_graphs = create_pyg_dataset(train_data, train_labels)
+    valid_graphs = create_pyg_dataset(valid_data, valid_labels)
 
     # hyperparams
     batch_size = 128
@@ -186,7 +187,7 @@ if __name__ == "__main__":
         train_graphs, batch_size=batch_size, shuffle=True
     )
     model = GCN(
-        num_node_features=graphs[0].num_node_features,
+        num_node_features=train_graphs[0].num_node_features,
         hidden_channels=64,
         num_classes=250,
         num_blocks=1,

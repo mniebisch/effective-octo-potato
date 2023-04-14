@@ -1,11 +1,12 @@
 import pathlib
-from typing import List, Tuple
+from typing import List, NewType, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import torch
 import torch_geometric.data as pyg_data
+import torch_geometric.transforms as pyg_transforms
 import tqdm
 
 from effective_octo_potato.graph_utils import (
@@ -22,7 +23,15 @@ from effective_octo_potato.graph_utils import (
 )
 from effective_octo_potato.kaggle import load_relevant_data_subset
 
-__all__ = ["TemporalFeatureGenerator", "create_pyg_dataset", "handle_training_data"]
+__all__ = [
+    "GraphDatset",
+    "TemporalFeatureGenerator",
+    "create_pyg_dataset",
+    "handle_training_data",
+]
+
+
+GraphDescription = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
 
 class TemporalFeatureGenerator(torch.nn.Module):
@@ -40,9 +49,7 @@ class TemporalFeatureGenerator(torch.nn.Module):
         )
         self.num_time_steps: int = 5
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> GraphDescription:
         """Feature Transformation.
         Args:
             x: Sign sequence with shape:
@@ -140,7 +147,7 @@ class TemporalFeatureGenerator(torch.nn.Module):
 
 def _create_features(
     file_name: pathlib.Path, feature_generator: TemporalFeatureGenerator
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> GraphDescription:
     sign_sequence = load_relevant_data_subset(pq_path=file_name)
     sign_sequence = torch.from_numpy(sign_sequence)
     features, edge_index, node_indices, time_steps = feature_generator(sign_sequence)
@@ -149,7 +156,7 @@ def _create_features(
 
 def create_features(
     file_names: List[pathlib.Path], feature_generator: TemporalFeatureGenerator
-) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+) -> List[GraphDescription]:
     return [
         _create_features(filename, feature_generator)
         for filename in tqdm.tqdm(file_names)
@@ -162,7 +169,7 @@ def handle_training_data(
     feature_dir: pathlib.Path,
     feature_generator: TemporalFeatureGenerator,
     feature_file_name: str,
-) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+) -> List[GraphDescription]:
     feature_matrix_file_name = feature_dir / feature_file_name
     if not feature_matrix_file_name.is_file():
         # TODO fix use of data from outer scope
@@ -184,16 +191,34 @@ def create_pyg_dataset(
         ]
     ],
     labels: npt.NDArray[np.integer],
-) -> List[pyg_data.Data]:
-    return [
-        pyg_data.Data(
+) -> pyg_data.InMemoryDataset:
+    return GraphDataset(data=feature_matrix, labels=labels)
+
+
+class GraphDataset(pyg_data.InMemoryDataset):
+    def __init__(
+        self,
+        data: List[GraphDescription],
+        labels: npt.NDArray[np.integer],
+        transform: Optional[pyg_transforms.BaseTransform] = None,
+        pre_transform: Optional[pyg_transforms.BaseTransform] = None,
+    ) -> None:
+        super().__init__(None, transform, pre_transform)
+        self.graph_information = data
+        self.labels = labels
+
+    def len(self) -> int:
+        return len(self.graph_information)
+
+    def get(self, idx: int) -> pyg_data.Data:
+        node_features, edge_index, node_indices, time_steps = self.graph_information[
+            idx
+        ]
+        label = self.labels[idx]
+        return pyg_data.Data(
             x=node_features,
             edge_index=edge_index,
-            y=torch.tensor(label),
             node_indices=node_indices,
             time_steps=time_steps,
+            y=torch.tensor(label),
         )
-        for (node_features, edge_index, node_indices, time_steps), label in zip(
-            feature_matrix, labels
-        )
-    ]
