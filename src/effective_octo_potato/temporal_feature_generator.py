@@ -30,7 +30,15 @@ __all__ = [
 ]
 
 
-GraphDescription = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+GraphDescription = Tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]
 
 
 class TemporalFeatureGenerator(torch.nn.Module):
@@ -141,11 +149,24 @@ class TemporalFeatureGenerator(torch.nn.Module):
             node_mask_frame_wise, reference_nodes_frame_wise
         )
         one_hot = _apply_nan_filter(node_mask_frame_wise, one_hot_frame_wise)
-        is_node = None
         node_indices = _apply_nan_filter(node_mask_frame_wise, node_indices_frame_wise)
         time_steps = _apply_nan_filter(node_mask_frame_wise, time_steps_frame_wise)
+        node_xyz = node_features
+        reference_xyz = reference_features
+        reference_time_steps = torch.arange(num_refernce_nodes).repeat_interleave(
+            self.num_time_steps
+        )
+        node_time_steps = time_steps
 
-        return node_features, edge_index, node_indices, time_steps
+        return (
+            node_xyz,
+            node_indices,
+            node_time_steps,
+            edge_index,
+            reference_xyz,
+            reference_time_steps,
+            one_hot,
+        )
 
 
 def _create_features(
@@ -153,8 +174,7 @@ def _create_features(
 ) -> GraphDescription:
     sign_sequence = load_relevant_data_subset(pq_path=file_name)
     sign_sequence = torch.from_numpy(sign_sequence)
-    features, edge_index, node_indices, time_steps = feature_generator(sign_sequence)
-    return features, edge_index, node_indices, time_steps
+    return feature_generator(sign_sequence)
 
 
 def create_features(
@@ -207,18 +227,27 @@ class GraphDataset(pyg_data.InMemoryDataset):
         return len(self.graph_information)
 
     def get(self, idx: int) -> pyg_data.Data:
-        node_features, edge_index, node_indices, time_steps = self.graph_information[
-            idx
-        ]
+        (
+            node_xyz,
+            node_indices,
+            node_time_steps,
+            edge_index,
+            reference_xyz,
+            reference_time_steps,
+            one_hot,
+        ) = self.graph_information[idx]
+
         label = self.labels[idx]
-        x = torch.tensor([], dtype=torch.float32).repeat(len(node_indices), 1)
         # TODO add node_features as data.pos
-        is_node = None
         data = pyg_data.Data(
-            edge_index=edge_index,
+            node_xyz=node_xyz,
             node_indices=node_indices,
-            time_steps=time_steps,
-            is_node=is_node,
+            node_time_steps=node_time_steps,
+            edge_index=edge_index,
+            reference_xyz=reference_xyz,
+            reference_time_steps=reference_time_steps,
+            one_hot=one_hot,
+            is_node=None,
             y=torch.tensor(label),
         )
 

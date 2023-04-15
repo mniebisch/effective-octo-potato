@@ -14,20 +14,15 @@ class CalcReferenceFeatures(pyg_transforms.BaseTransform):
         super().__init__()
 
     def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
-        nodes = data.pos[data.is_node]
-        node_time_steps = data.time_steps[data.is_node]
-        reference = data.pos[torch.logical_not(data.is_node)]
-        reference_time_steps = data.time_steps[torch.logical_not(data.is_node)]
-
         reference_features = []
         for time_ind in torch.unique(data.time_steps):
             reference_feature_time_step = calc_node_dist_to_reference_feature(
-                nodes=nodes[node_time_steps == time_ind],
-                reference=reference[reference_time_steps == time_ind],
+                nodes=data.node_xyz[data.time_steps == time_ind],
+                reference=data.reference_xyz[data.reference_time_steps == time_ind],
             )
             reference_features.append(reference_feature_time_step)
 
-        data.x = reference_features = torch.cat(reference_features)
+        data.reference_features = torch.cat(reference_features, dim=0)
         return data
 
 
@@ -37,7 +32,9 @@ class CatNodeFeatures(pyg_transforms.BaseTransform):
         super().__init__()
 
     def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
-        data.x = torch.cat([data.pos, data.reference_features, data.one_hot], dim=1)
+        data.x = torch.cat(
+            [data.node_xyz, data.reference_features, data.one_hot], dim=1
+        )
         return data
 
 
@@ -47,8 +44,8 @@ class StackPosNodes(pyg_transforms.BaseTransform):
         super().__init__()
 
     def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
-        data.pos = torch.cat([data.node_features, data.reference_features])
-        is_node = torch.zeros_like(data.pos, dtype=torch.bool)
+        data.pos = torch.cat([data.node_xyz, data.reference_xyz], dim=0)
+        is_node = torch.zeros(data.pos.shape[0], dtype=torch.bool)
         is_node[torch.arange(data.num_node_features.shape[0])] = True
         data.is_node = is_node
         return data
@@ -60,7 +57,7 @@ class SplitPosNodes(pyg_transforms.BaseTransform):
         super().__init__()
 
     def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
-        data.node_features = data.pos[data.is_node]
-        data.reference_features = data.pos[torch.logical_not(data.is_node)]
+        data.node_xyz = data.pos[data.is_node]
+        data.reference_xyz = data.pos[torch.logical_not(data.is_node)]
         data.is_node = None
         return data
