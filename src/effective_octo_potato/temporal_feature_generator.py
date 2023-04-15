@@ -11,7 +11,6 @@ import tqdm
 
 from effective_octo_potato.graph_utils import (
     apply_node_mask_to_edges,
-    calc_node_dist_to_reference_feature,
     compute_reference_nodes,
     create_edge_index,
     create_node_indices,
@@ -73,12 +72,15 @@ class TemporalFeatureGenerator(torch.nn.Module):
         )
         time_steps_frame_wise = time_steps_frame_wise.T
         num_refernce_nodes = compute_reference_nodes(torch.zeros(543, 3)).shape[0]
+        reference_nodes_frame_wise = torch.zeros(
+            (self.num_time_steps, num_refernce_nodes, 3), dtype=torch.float32
+        )
         node_features_frame_wise = torch.zeros(
-            (
-                self.num_time_steps,
-                len(self.node_indices),
-                3 + len(self.one_hot) + num_refernce_nodes,
-            )
+            (self.num_time_steps, len(self.node_indices), 3), dtype=torch.float32
+        )
+        one_hot_frame_wise = torch.zeros(
+            (self.num_time_steps, self.one_hot.shape[0], self.one_hot.shape[1]),
+            dtype=torch.float32,
         )
         for time_ind in range(self.num_time_steps):
             # node features
@@ -88,9 +90,8 @@ class TemporalFeatureGenerator(torch.nn.Module):
             # compute_reference_nodes needs to be applied to all 543 nodes!
             reference_coords = compute_reference_nodes(node_feat_time)
             node_feat_time = node_feat_time[self.node_indices]
-            reference_feat = calc_node_dist_to_reference_feature(
-                nodes=node_feat_time, reference=reference_coords
-            )
+            reference_nodes_frame_wise[time_ind] = reference_coords
+            one_hot_frame_wise[time_ind] = self.one_hot
 
             # # filter nan
             nan_mask = torch.isnan(node_feat_time)
@@ -98,10 +99,6 @@ class TemporalFeatureGenerator(torch.nn.Module):
             nan_mask = torch.logical_not(nan_mask)
             node_mask_frame_wise[time_ind] = nan_mask
 
-            # # put node features together
-            node_feat_time = torch.cat(
-                [node_feat_time, reference_feat, self.one_hot], dim=1
-            )
             node_features_frame_wise[time_ind] = node_feat_time
 
         # create edge indices
@@ -140,6 +137,11 @@ class TemporalFeatureGenerator(torch.nn.Module):
         node_features = _apply_nan_filter(
             node_mask_frame_wise, node_features_frame_wise
         )
+        reference_features = _apply_nan_filter(
+            node_mask_frame_wise, reference_nodes_frame_wise
+        )
+        one_hot = _apply_nan_filter(node_mask_frame_wise, one_hot_frame_wise)
+        is_node = None
         node_indices = _apply_nan_filter(node_mask_frame_wise, node_indices_frame_wise)
         time_steps = _apply_nan_filter(node_mask_frame_wise, time_steps_frame_wise)
 
@@ -209,11 +211,14 @@ class GraphDataset(pyg_data.InMemoryDataset):
             idx
         ]
         label = self.labels[idx]
+        x = torch.tensor([], dtype=torch.float32).repeat(len(node_indices), 1)
+        # TODO add node_features as data.pos
+        is_node = None
         data = pyg_data.Data(
-            x=node_features,
             edge_index=edge_index,
             node_indices=node_indices,
             time_steps=time_steps,
+            is_node=is_node,
             y=torch.tensor(label),
         )
 

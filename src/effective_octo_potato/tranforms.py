@@ -11,13 +11,13 @@ __all__ = ["CalcReferenceFeatures"]
 @pyg_datapipes.functional_transform("calc_reference_features")
 class CalcReferenceFeatures(pyg_transforms.BaseTransform):
     def __init__(self) -> None:
-        pass
+        super().__init__()
 
     def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
-        nodes = data.pos[data.node_indices]
-        node_time_steps = data.time_steps[data.node_indices]
-        reference = data.pos[data.reference_indices]
-        reference_time_steps = data.time_steps[data.reference_indices]
+        nodes = data.pos[data.is_node]
+        node_time_steps = data.time_steps[data.is_node]
+        reference = data.pos[torch.logical_not(data.is_node)]
+        reference_time_steps = data.time_steps[torch.logical_not(data.is_node)]
 
         reference_features = []
         for time_ind in torch.unique(data.time_steps):
@@ -26,13 +26,41 @@ class CalcReferenceFeatures(pyg_transforms.BaseTransform):
                 reference=reference[reference_time_steps == time_ind],
             )
             reference_features.append(reference_feature_time_step)
-        reference_features = torch.cat(reference_features)
 
-        # TODO init x? empty but correct shape? something like torch.tensor([[] ])
-        data.x = torch.cat([data.x, nodes, reference_features], dim=1)
-
+        data.x = reference_features = torch.cat(reference_features)
         return data
 
 
-# prep for x init
-# torch.tensor([[] for _ in range(len(data.node_indices))])
+@pyg_datapipes.functional_transform("cat_node_features")
+class CatNodeFeatures(pyg_transforms.BaseTransform):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
+        data.x = torch.cat([data.pos, data.reference_features, data.one_hot], dim=1)
+        return data
+
+
+# hmpf introduces coupling
+class StackPosNodes(pyg_transforms.BaseTransform):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
+        data.pos = torch.cat([data.node_features, data.reference_features])
+        is_node = torch.zeros_like(data.pos, dtype=torch.bool)
+        is_node[torch.arange(data.num_node_features.shape[0])] = True
+        data.is_node = is_node
+        return data
+
+
+# hmpf introduces coupling
+class SplitPosNodes(pyg_transforms.BaseTransform):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
+        data.node_features = data.pos[data.is_node]
+        data.reference_features = data.pos[torch.logical_not(data.is_node)]
+        data.is_node = None
+        return data
