@@ -160,7 +160,7 @@ if __name__ == "__main__":
 
     # create/load features
     # feature_matrix_file_name = "graph_data_meanstd_subpose_reference_nodes.zip"
-    feature_matrix_file_name = "first_temporal_graph_with_transforms.zip"
+    feature_matrix_file_name = "first_temporal_graph_with_edge_attr.zip"
     fg = TemporalFeatureGenerator()
 
     feature_matrix = handle_training_data(

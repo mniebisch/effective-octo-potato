@@ -10,8 +10,10 @@ import torch_geometric.transforms as pyg_transforms
 import tqdm
 
 from effective_octo_potato.graph_utils import (
+    apply_node_mask_to_edge_attr,
     apply_node_mask_to_edges,
     compute_reference_nodes,
+    create_edge_attr,
     create_edge_index,
     create_node_indices,
     create_node_mask,
@@ -31,6 +33,7 @@ __all__ = [
 
 
 GraphDescription = Tuple[
+    torch.Tensor,
     torch.Tensor,
     torch.Tensor,
     torch.Tensor,
@@ -123,7 +126,27 @@ class TemporalFeatureGenerator(torch.nn.Module):
         edge_index_temporal = create_temporal_edge_indices(
             num_nodes=len(self.node_indices), num_frames=self.num_time_steps
         )
+        # num_body_edges and num_total_edges are required to compute edge_attr
+        # indicating whether an edge is describing body conections or time connections
+        # has to be computed before body edges and time edges are concatenated
+        num_body_edges = edge_index.shape[1]
+        num_total_edges = edge_index.shape[1] + edge_index_temporal.shape[1]
+
+        # order matters here
+        # 1. create edge representation of body and time
         edge_index = torch.cat([edge_index, edge_index_temporal], dim=1)
+
+        # 2. create edge attributes indicating whether body or time edge
+        edge_attr = create_edge_attr(
+            num_body_edges=num_body_edges, num_total_edges=num_total_edges
+        )
+        # 3. filter edge attributes with unfiltered edge_index!!!
+        edge_attr = apply_node_mask_to_edge_attr(
+            edge_attr=edge_attr,
+            edge_index=edge_index,
+            mask=node_mask_frame_wise.reshape(-1),
+        )
+        # 4. filter edge representation
         edge_index = apply_node_mask_to_edges(
             mask=node_mask_frame_wise.reshape(-1), edge_index=edge_index
         )
@@ -170,6 +193,7 @@ class TemporalFeatureGenerator(torch.nn.Module):
             node_indices,
             node_time_steps,
             edge_index,
+            edge_attr,
             reference_xyz,
             reference_time_steps,
             one_hot,
@@ -240,6 +264,7 @@ class GraphDataset(pyg_data.InMemoryDataset):
             node_indices,
             node_time_steps,
             edge_index,
+            edge_attr,
             reference_xyz,
             reference_time_steps,
             one_hot,
@@ -252,6 +277,7 @@ class GraphDataset(pyg_data.InMemoryDataset):
             node_indices=node_indices,
             node_time_steps=node_time_steps,
             edge_index=edge_index,
+            edge_attr=edge_attr,
             reference_xyz=reference_xyz,
             reference_time_steps=reference_time_steps,
             one_hot=one_hot,

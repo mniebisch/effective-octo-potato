@@ -3,6 +3,8 @@ import torch_geometric.utils as pyg_utils
 
 __all__ = [
     "apply_node_mask_to_edges",
+    "apply_node_mask_to_edge_attr",
+    "create_edge_attr",
     "create_edge_index",
     "create_left_hand_edge_index",
     "create_node_indices",
@@ -42,6 +44,25 @@ def apply_node_mask_to_edges(
     lookup_table[mask] = torch.arange(torch.sum(mask).item())
 
     return lookup_table[edge_index]
+
+
+def create_edge_attr(num_body_edges: int, num_total_edges: int) -> torch.Tensor:
+    edge_attr = torch.zeros((num_total_edges, 2), dtype=torch.float32)
+    body_edge_col = torch.zeros(num_total_edges, dtype=torch.bool)
+    body_edge_col[torch.arange(num_body_edges)] = True
+    # body edges ([1, 0] one-hot)
+    edge_attr[body_edge_col, 0] = 1.0
+    # temporal edges ([0, 1], one-hot)
+    edge_attr[torch.logical_not(body_edge_col), 1] = 1.0
+    return edge_attr
+
+
+def apply_node_mask_to_edge_attr(
+    edge_attr: torch.Tensor, edge_index: torch.Tensor, mask: torch.Tensor
+) -> torch.Tensor:
+    # drop edges, keep where col(!) is all true
+    valid_edges = mask[edge_index].all(dim=0)
+    return edge_attr[valid_edges]
 
 
 def create_node_indices() -> torch.Tensor:
