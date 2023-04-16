@@ -149,8 +149,8 @@ class TemporalFeatureGenerator(torch.nn.Module):
         node_features = _apply_nan_filter(
             node_mask_frame_wise, node_features_frame_wise
         )
-        reference_features = _apply_nan_filter(
-            node_mask_frame_wise, reference_nodes_frame_wise
+        reference_features = torch.cat(
+            [frame_data for frame_data in reference_nodes_frame_wise], dim=0
         )
         one_hot = _apply_nan_filter(node_mask_frame_wise, one_hot_frame_wise)
         node_indices = _apply_nan_filter(node_mask_frame_wise, node_indices_frame_wise)
