@@ -8,6 +8,7 @@ from effective_octo_potato.graph_utils import calc_node_dist_to_reference_featur
 __all__ = [
     "CalcReferenceFeatures",
     "CatNodeFeatures",
+    "DropDepthDimension",
     "PosSplitNodes",
     "PosStackNodes",
 ]
@@ -68,4 +69,17 @@ class PosSplitNodes(pyg_transforms.BaseTransform):
         data.reference_xyz = data.pos[torch.logical_not(data.is_node)]
         data.is_node = None
         data.pos = None
+        return data
+
+
+@pyg_datapipes.functional_transform("drop_depth_dimension")
+class DropDepthDimension(pyg_transforms.BaseTransform):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
+        # third column (out of 3) is considered depth information
+        xy_dim = [0, 1]
+        data.node_xyz = data.node_xyz[:, xy_dim]
+        data.reference_xyz = data.reference_xyz[:, xy_dim]
         return data

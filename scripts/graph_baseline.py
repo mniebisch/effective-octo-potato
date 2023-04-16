@@ -24,6 +24,7 @@ from effective_octo_potato.temporal_feature_generator import (
 from effective_octo_potato.transforms import (
     CalcReferenceFeatures,
     CatNodeFeatures,
+    DropDepthDimension,
     PosSplitNodes,
     PosStackNodes,
 )
@@ -197,6 +198,7 @@ if __name__ == "__main__":
             pyg_transforms.RandomRotate(degrees=25, axis=1),
             pyg_transforms.RandomRotate(degrees=25, axis=2),
             PosSplitNodes(),
+            DropDepthDimension(),
             CalcReferenceFeatures(),
             CatNodeFeatures(),
         ]
@@ -206,6 +208,7 @@ if __name__ == "__main__":
             PosStackNodes(),
             pyg_transforms.NormalizeScale(),
             PosSplitNodes(),
+            DropDepthDimension(),
             CalcReferenceFeatures(),
             CatNodeFeatures(),
         ]
