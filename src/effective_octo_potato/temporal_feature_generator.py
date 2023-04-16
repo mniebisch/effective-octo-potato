@@ -149,18 +149,21 @@ class TemporalFeatureGenerator(torch.nn.Module):
         node_features = _apply_nan_filter(
             node_mask_frame_wise, node_features_frame_wise
         )
+        node_xyz = node_features
+        node_indices = _apply_nan_filter(node_mask_frame_wise, node_indices_frame_wise)
+        time_steps = _apply_nan_filter(node_mask_frame_wise, time_steps_frame_wise)
+        node_time_steps = time_steps
+
+        # reference information from pose nodes which are never NaN
         reference_features = torch.cat(
             [frame_data for frame_data in reference_nodes_frame_wise], dim=0
         )
-        one_hot = _apply_nan_filter(node_mask_frame_wise, one_hot_frame_wise)
-        node_indices = _apply_nan_filter(node_mask_frame_wise, node_indices_frame_wise)
-        time_steps = _apply_nan_filter(node_mask_frame_wise, time_steps_frame_wise)
-        node_xyz = node_features
         reference_xyz = reference_features
         reference_time_steps = torch.arange(num_refernce_nodes).repeat_interleave(
             self.num_time_steps
         )
-        node_time_steps = time_steps
+
+        one_hot = _apply_nan_filter(node_mask_frame_wise, one_hot_frame_wise)
 
         return (
             node_xyz,
