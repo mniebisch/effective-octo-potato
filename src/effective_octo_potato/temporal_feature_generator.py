@@ -214,8 +214,9 @@ def handle_training_data(
 def create_pyg_dataset(
     feature_matrix: List[GraphDescription],
     labels: npt.NDArray[np.integer],
+    transform: Optional[pyg_transforms.BaseTransform] = None,
 ) -> pyg_data.InMemoryDataset:
-    return GraphDataset(data=feature_matrix, labels=labels)
+    return GraphDataset(data=feature_matrix, labels=labels, transform=transform)
 
 
 class GraphDataset(pyg_data.InMemoryDataset):

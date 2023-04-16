@@ -1,5 +1,6 @@
 import json
 import pathlib
+import warnings
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
@@ -9,9 +10,9 @@ import numpy.typing as npt
 # import onnxruntime
 import pandas as pd
 import torch
-import torch_geometric.data as pyg_data
 import torch_geometric.loader as pyg_loader
 import torch_geometric.nn as pyg_nn
+import torch_geometric.transforms as pyg_transforms
 import tqdm
 from sklearn import model_selection
 
@@ -19,6 +20,12 @@ from effective_octo_potato.temporal_feature_generator import (
     TemporalFeatureGenerator,
     create_pyg_dataset,
     handle_training_data,
+)
+from effective_octo_potato.transforms import (
+    CalcReferenceFeatures,
+    CatNodeFeatures,
+    PosSplitNodes,
+    PosStackNodes,
 )
 
 # TODO 1 up-/or downsampling of frames to fixed number of frames via interpolation [IMPLEMENTED]
@@ -30,6 +37,11 @@ from effective_octo_potato.temporal_feature_generator import (
 # TODO 7 consider adding node indicator similar to pyg's batch variable (returned from pyg.DataLoader) [IMPLEMENTED]
 # TODO 8 make reference nodes aditional output. remove distance from node features.
 # compute later in augmentation. add time_step_indices information for reference nodes.
+
+# https://github.com/pytorch/pytorch/issues/97207
+warnings.filterwarnings(
+    "ignore", category=UserWarning, message="TypedStorage is deprecated"
+)
 
 
 def _get_label_map(data_dir: pathlib.Path) -> Dict[str, int]:
@@ -148,7 +160,7 @@ if __name__ == "__main__":
 
     # create/load features
     # feature_matrix_file_name = "graph_data_meanstd_subpose_reference_nodes.zip"
-    feature_matrix_file_name = "first_temporal_graph.zip"
+    feature_matrix_file_name = "first_temporal_graph_with_transforms.zip"
     fg = TemporalFeatureGenerator()
 
     feature_matrix = handle_training_data(
@@ -174,8 +186,29 @@ if __name__ == "__main__":
     train_labels = labels[train_indices]
     valid_labels = labels[valid_indices]
 
-    train_graphs = create_pyg_dataset(train_data, train_labels)
-    valid_graphs = create_pyg_dataset(valid_data, valid_labels)
+    # transforms
+    train_transform = pyg_transforms.Compose(
+        [
+            # PosStackNodes(),
+            # Add random stuff here
+            # PosSplitNodes()
+            CalcReferenceFeatures(),
+            CatNodeFeatures(),
+        ]
+    )
+    valid_transform = pyg_transforms.Compose(
+        [
+            CalcReferenceFeatures(),
+            CatNodeFeatures(),
+        ]
+    )
+
+    train_graphs = create_pyg_dataset(
+        train_data, train_labels, transform=train_transform
+    )
+    valid_graphs = create_pyg_dataset(
+        valid_data, valid_labels, transform=valid_transform
+    )
 
     # hyperparams
     batch_size = 128
@@ -184,7 +217,7 @@ if __name__ == "__main__":
     # pyg stuff
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     train_dataloader = pyg_loader.DataLoader(
-        train_graphs, batch_size=batch_size, shuffle=True
+        train_graphs, batch_size=batch_size, shuffle=True, num_workers=10
     )
     model = GCN(
         num_node_features=train_graphs[0].num_node_features,
