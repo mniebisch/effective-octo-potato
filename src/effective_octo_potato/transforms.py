@@ -52,7 +52,7 @@ class PosStackNodes(pyg_transforms.BaseTransform):
     def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
         data.pos = torch.cat([data.node_xyz, data.reference_xyz], dim=0)
         is_node = torch.zeros(data.pos.shape[0], dtype=torch.bool)
-        is_node[torch.arange(data.num_node_features.shape[0])] = True
+        is_node[torch.arange(data.node_xyz.shape[0])] = True
         data.is_node = is_node
         return data
 
@@ -67,4 +67,5 @@ class PosSplitNodes(pyg_transforms.BaseTransform):
         data.node_xyz = data.pos[data.is_node]
         data.reference_xyz = data.pos[torch.logical_not(data.is_node)]
         data.is_node = None
+        data.pos = None
         return data
