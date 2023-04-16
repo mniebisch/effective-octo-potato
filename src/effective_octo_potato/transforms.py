@@ -20,9 +20,9 @@ class CalcReferenceFeatures(pyg_transforms.BaseTransform):
 
     def __call__(self, data: pyg_data.Data) -> pyg_data.Data:
         reference_features = []
-        for time_ind in torch.unique(data.time_steps):
+        for time_ind in torch.unique(data.node_time_steps):
             reference_feature_time_step = calc_node_dist_to_reference_feature(
-                nodes=data.node_xyz[data.time_steps == time_ind],
+                nodes=data.node_xyz[data.node_time_steps == time_ind],
                 reference=data.reference_xyz[data.reference_time_steps == time_ind],
             )
             reference_features.append(reference_feature_time_step)
