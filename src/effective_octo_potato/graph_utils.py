@@ -36,7 +36,7 @@ def apply_node_mask_to_edges(
     valid_edges = mask[edge_index].all(dim=0)
     edge_index = edge_index[:, valid_edges]
 
-    # create lookup
+    # create lookup to adapt enumeration of edges (node pairs) back to [0, num_filtered_nodes]
     lookup_table = torch.zeros_like(mask, dtype=torch.long)
     lookup_table[mask] = torch.arange(torch.sum(mask).item())
 
