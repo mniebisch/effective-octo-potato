@@ -189,15 +189,23 @@ if __name__ == "__main__":
     # transforms
     train_transform = pyg_transforms.Compose(
         [
-            # PosStackNodes(),
-            # Add random stuff here
-            # PosSplitNodes()
+            PosStackNodes(),
+            pyg_transforms.NormalizeScale(),
+            pyg_transforms.RandomShear(shear=0.3),
+            pyg_transforms.RandomJitter(translate=0.1),
+            pyg_transforms.RandomRotate(degrees=25, axis=0),
+            pyg_transforms.RandomRotate(degrees=25, axis=1),
+            pyg_transforms.RandomRotate(degrees=25, axis=2),
+            PosSplitNodes(),
             CalcReferenceFeatures(),
             CatNodeFeatures(),
         ]
     )
     valid_transform = pyg_transforms.Compose(
         [
+            PosStackNodes(),
+            pyg_transforms.NormalizeScale(),
+            PosSplitNodes(),
             CalcReferenceFeatures(),
             CatNodeFeatures(),
         ]
@@ -212,7 +220,7 @@ if __name__ == "__main__":
 
     # hyperparams
     batch_size = 128
-    epochs = 175
+    epochs = 4  # 175
 
     # pyg stuff
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
