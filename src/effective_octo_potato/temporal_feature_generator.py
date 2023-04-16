@@ -131,6 +131,10 @@ class TemporalFeatureGenerator(torch.nn.Module):
         def _apply_nan_filter(
             nan_masks_frame_wise: torch.Tensor, data_frame_wise: torch.Tensor
         ) -> torch.Tensor:
+            """
+            Apply mask to filter nans to each time step and stack nodes of separate
+            time steps into a single joint node representation.
+            """
             return torch.cat(
                 [
                     frame_data[frame_mask]
