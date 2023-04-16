@@ -44,6 +44,7 @@ class CatNodeFeatures(pyg_transforms.BaseTransform):
 
 
 # hmpf introduces coupling
+@pyg_datapipes.functional_transform("pos_stack_nodes")
 class PosStackNodes(pyg_transforms.BaseTransform):
     def __init__(self) -> None:
         super().__init__()
@@ -57,6 +58,7 @@ class PosStackNodes(pyg_transforms.BaseTransform):
 
 
 # hmpf introduces coupling
+@pyg_datapipes.functional_transform("pos_split_nodes")
 class PosSplitNodes(pyg_transforms.BaseTransform):
     def __init__(self) -> None:
         super().__init__()
