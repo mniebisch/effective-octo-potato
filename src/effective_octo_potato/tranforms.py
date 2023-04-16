@@ -5,7 +5,12 @@ from torch_geometric.data import datapipes as pyg_datapipes
 
 from effective_octo_potato.graph_utils import calc_node_dist_to_reference_feature
 
-__all__ = ["CalcReferenceFeatures"]
+__all__ = [
+    "CalcReferenceFeatures",
+    "CatNodeFeatures",
+    "PosSplitNodes",
+    "PosStackNodes",
+]
 
 
 @pyg_datapipes.functional_transform("calc_reference_features")
@@ -39,7 +44,7 @@ class CatNodeFeatures(pyg_transforms.BaseTransform):
 
 
 # hmpf introduces coupling
-class StackPosNodes(pyg_transforms.BaseTransform):
+class PosStackNodes(pyg_transforms.BaseTransform):
     def __init__(self) -> None:
         super().__init__()
 
@@ -52,7 +57,7 @@ class StackPosNodes(pyg_transforms.BaseTransform):
 
 
 # hmpf introduces coupling
-class SplitPosNodes(pyg_transforms.BaseTransform):
+class PosSplitNodes(pyg_transforms.BaseTransform):
     def __init__(self) -> None:
         super().__init__()
 
