@@ -22,6 +22,25 @@ __all__ = [
 ]
 
 
+def pyg_edge_index_representation(
+    func: Callable[[], List[Tuple[int, int]]]
+) -> Callable[[], torch.Tensor]:
+    def pyg_presentation() -> torch.Tensor:
+        edge_index = torch.tensor(func(), dtype=torch.int64)
+        return pyg_utils.to_undirected(edge_index)
+
+    return pyg_presentation
+
+
+def cat_pyg_edge_index(
+    func: Callable[[], List[torch.Tensor]]
+) -> Callable[[], torch.Tensor]:
+    def cat() -> torch.Tensor:
+        return torch.cat(func(), dim=1)
+
+    return cat
+
+
 def apply_node_mask_to_edges(
     mask: torch.Tensor, edge_index: torch.Tensor
 ) -> torch.Tensor:
@@ -97,35 +116,31 @@ def create_one_hot(num_nodes: int) -> torch.Tensor:
     return torch.nn.functional.one_hot(torch.arange(num_nodes))
 
 
-def _create_hand_edge_index() -> torch.Tensor:
-    hand_edges = torch.tensor(
-        [
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 4),
-            (0, 5),
-            (5, 6),
-            (6, 7),
-            (7, 8),
-            (5, 9),
-            (9, 10),
-            (10, 11),
-            (11, 12),
-            (9, 13),
-            (13, 14),
-            (14, 15),
-            (15, 16),
-            (13, 17),
-            (0, 17),
-            (17, 18),
-            (18, 19),
-            (19, 20),
-        ],
-        dtype=torch.int64,
-    )
-    hand_edges = hand_edges.T
-    return pyg_utils.to_undirected(hand_edges)
+@pyg_edge_index_representation
+def _create_hand_edge_index() -> List[Tuple[int, int]]:
+    return [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 4),
+        (0, 5),
+        (5, 6),
+        (6, 7),
+        (7, 8),
+        (5, 9),
+        (9, 10),
+        (10, 11),
+        (11, 12),
+        (9, 13),
+        (13, 14),
+        (14, 15),
+        (15, 16),
+        (13, 17),
+        (0, 17),
+        (17, 18),
+        (18, 19),
+        (19, 20),
+    ]
 
 
 def create_left_hand_edge_index() -> torch.Tensor:
@@ -138,59 +153,69 @@ def create_right_hand_edge_index() -> torch.Tensor:
     return _create_hand_edge_index() + right_hand_shift
 
 
-def _create_pose_edge_index() -> torch.Tensor:
-    pose_edges = torch.tensor(
-        [
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 7),
-            (0, 4),
-            (4, 5),
-            (5, 6),
-            (6, 8),
-            (9, 10),
-            (11, 12),
-            (11, 13),
-            (11, 23),
-            (13, 15),
-            (15, 21),
-            (15, 19),
-            (15, 17),
-            (17, 19),
-            (12, 14),
-            (12, 24),
-            (14, 16),
-            (16, 22),
-            (16, 18),
-            (16, 20),
-            (18, 20),
-            (23, 24),
-            (23, 25),
-            (25, 27),
-            (27, 29),
-            (27, 31),
-            (29, 31),
-            (24, 26),
-            (26, 28),
-            (28, 30),
-            (28, 32),
-            (30, 32),
-        ],
-        dtype=torch.int64,
-    )
-    pose_edges = pose_edges.T
-    return pyg_utils.to_undirected(pose_edges)
+@pyg_edge_index_representation
+def _create_pose_edge_index() -> List[Tuple[int, int]]:
+    return [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 7),
+        (0, 4),
+        (4, 5),
+        (5, 6),
+        (6, 8),
+        (9, 10),
+        (11, 12),
+        (11, 13),
+        (11, 23),
+        (13, 15),
+        (15, 21),
+        (15, 19),
+        (15, 17),
+        (17, 19),
+        (12, 14),
+        (12, 24),
+        (14, 16),
+        (16, 22),
+        (16, 18),
+        (16, 20),
+        (18, 20),
+        (23, 24),
+        (23, 25),
+        (25, 27),
+        (27, 29),
+        (27, 31),
+        (29, 31),
+        (24, 26),
+        (26, 28),
+        (28, 30),
+        (28, 32),
+        (30, 32),
+    ]
 
 
-def pyg_edge_index_representation(
-    func: Callable[[], List[Tuple[int, int]]]
-) -> Callable[[], torch.Tensor]:
-    def pyg_presentation() -> torch.Tensor:
-        edge_index = torch.tensor(func(), dtype=torch.int64)
-        return pyg_utils.to_undirected(edge_index)
+def create_pose_edge_index() -> torch.Tensor:
+    pose_shift = 489
+    return _create_pose_edge_index() + pose_shift
 
-    return pyg_presentation
+
+@cat_pyg_edge_index
+def create_edge_index() -> List[torch.Tensor]:
+    """
+    The edge indices for the nodes we are using in our experiments.
+    We use the following body parts:
+        - left hand
+        - right hand
+        - pose
+
+    The numeration of the nodes is such that it matches the order or the full
+    dataset (all body parts) provided at inference time (543 nodes per frame).
+    """
+    return [
+        create_left_hand_edge_index(),
+        create_right_hand_edge_index(),
+        create_pose_edge_index(),
+    ]
 
 
 @pyg_edge_index_representation
@@ -392,15 +417,6 @@ def _create_nose_edge_index() -> List[Tuple[int, int]]:
         (48, 64),
         (64, 98),
     ]
-
-
-def cat_pyg_edge_index(
-    func: Callable[[], List[torch.Tensor]]
-) -> Callable[[], torch.Tensor]:
-    def cat() -> torch.Tensor:
-        return torch.cat(func(), dim=1)
-
-    return cat
 
 
 @cat_pyg_edge_index
@@ -2995,30 +3011,6 @@ def _create_full_face_edge_index() -> List[torch.Tensor]:
 def create_full_face_edge_index() -> torch.Tensor:
     face_shift = 0
     return _create_full_face_edge_index() + face_shift
-
-
-def create_pose_edge_index() -> torch.Tensor:
-    pose_shift = 489
-    return _create_pose_edge_index() + pose_shift
-
-
-def create_edge_index() -> torch.Tensor:
-    """
-    The edge indices for the nodes we are using in our experiments.
-    We use the following body parts:
-        - left hand
-        - right hand
-        - pose
-
-    The numeration of the nodes is such that it matches the order or the full
-    dataset (all body parts) provided at inference time (543 nodes per frame).
-    """
-    body_part_edge_index = [
-        create_left_hand_edge_index(),
-        create_right_hand_edge_index(),
-        create_pose_edge_index(),
-    ]
-    return torch.cat(body_part_edge_index, dim=1)
 
 
 def get_pose_subgraph_nodes() -> torch.Tensor:
