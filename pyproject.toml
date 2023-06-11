@@ -7,7 +7,7 @@ name = "effective_octo_potato"
 authors = [{ name = "Christian Reimers" }, { name = "Michael Niebisch" }]
 readme = "README.md"
 requires-python = "<3.10"
-dependencies = ["pandas", "pyarrow", "torch", "tqdm"]
+dependencies = ["pandas", "pyarrow", "torch", "tqdm", "torchdata", "torch_geometric"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
